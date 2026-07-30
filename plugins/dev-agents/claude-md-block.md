@@ -4,11 +4,11 @@ supersedes: [context-offload]
 ---
 ## Delegate to subagents by default (dev-agents)
 
-**Default to delegation.** On a non-trivial task, route the work to a subagent rather than reading and editing inline. The main thread orchestrates and decides; subagents do the work in their own context and return a compact result — conclusions, `file:line` references, a change summary — never raw file contents. This is the main lever that keeps a long task's context lean, so reach for it early. The exceptions at the end of this block are real and worth honouring, but they are exceptions.
+**Default to delegation.** On a non-trivial task, route the work to a subagent rather than reading and editing inline. The main thread orchestrates and decides; subagents do the work in their own context and return a compact result — conclusions, `file:line` references, a change summary — never raw file contents. This is the main lever that keeps a long task's context lean, so reach for it early, at every stage of a task rather than once implementation starts. The exceptions at the end are real, but they are exceptions.
 
 Delegation serves two separate goals. Most work triggers only one:
 
-1. **Keep raw output out of the main thread.** Applies to reads: a file dump or a build log stays in the subagent's context and only the conclusion comes back.
+1. **Keep raw output out of the main thread.** Applies to reads: a file dump or a build log stays in the subagent's context and only the conclusion comes back. The heaviest reading is usually in clarifying the ask, brainstorming and planning, so delegate from the first exploratory read, not the first edit.
 2. **Keep typing off the expensive model.** Applies to writes: a read costs context, but writing code costs model time on whatever tier the main thread is running. That cost never shows up in the transcript, which is why it is the one that gets forgotten.
 
 Route by complexity:

@@ -11,9 +11,9 @@ Ten subagents with the model tier fixed per role, three reminder hooks, and a
 **Read this only when you need the reasoning.** The pack's day-to-day behaviour
 comes from the `CLAUDE.md` block (`/dev-agents:sync-claude-md`), which is
 resident on every turn and carries the routing table and the write-handoff rule
-in about 2.4k characters. This document is the long-form justification behind it:
+in about 3.7k characters. This document is the long-form justification behind it:
 why delegation works, when it is a net loss, and what it cannot do. Loading it
-costs roughly 3.4k tokens, so do not pull it in for a decision the block already
+costs roughly 3.6k tokens, so do not pull it in for a decision the block already
 answers.
 
 ## Why delegation works
@@ -36,6 +36,37 @@ An earlier version of this guidance only made argument 1, with an observable
 consequence: exploration got delegated to cheap models while every line of code
 was still written by the main thread on an expensive one. See
 [Handing off writes](#handing-off-writes).
+
+## Delegation is a layer, not a phase
+
+Both arguments are about a **unit of work**, not about where you are in the task.
+A tier is chosen per read and per write, so neither argument waits for
+implementation to begin.
+
+In practice the reverse holds. Clarifying the ask, brainstorming, writing the plan
+and reviewing a design are usually where the *heaviest* reading of the whole task
+happens, because that is when you are surveying an unfamiliar codebase, checking
+conventions and locating call sites. Confining delegation to the implementation
+phase therefore leaves the largest reads sitting on the most expensive model.
+
+| Stage | What gets read or written | Route to |
+|---|---|---|
+| Clarifying the ask | Current behaviour, prior art, local conventions | `quick-read` |
+| Brainstorming, planning | Call sites, affected files, interface signatures | `quick-read` |
+| Design review | Whether the approach holds up | `deepthink` |
+| Diagnosis | Logs, stack traces, version diffs | `quick-read`, then `deepthink` for the root cause |
+| Implementation | A change already decided | `quick-io` or the matching role agent |
+| Verification | Test runs, build output | `test-engineer`, `devops-engineer` |
+
+The one thing that stays in the main thread at every stage is the deciding
+itself. Everything feeding into a decision, and everything carrying it out, can
+go to a subagent.
+
+This is easy to lose because delegation reads like a step in a sequence, and the
+planning skills that usually run first (brainstorming, writing a plan, systematic
+debugging) each describe a stage. Those skills say what the current step is for;
+this one says which model executes each read and write inside it. They are
+orthogonal, so nothing here belongs in that sequence.
 
 ## The agents
 

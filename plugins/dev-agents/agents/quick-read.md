@@ -1,6 +1,6 @@
 ---
 name: quick-read
-description: Use for trivial, read-only sub-tasks - searching code, reading and extracting fields from files, summarizing grep/search results, or simple classification of a passage. It has no write access and cannot modify anything, so it is well suited to keeping large raw output in its own context and returning only the distilled conclusion to the main thread. Do not use it for any edit/write work (hand that to quick-io), and do not use it for architecture or design trade-offs (hand that to deepthink).
+description: Use for trivial, read-only sub-tasks - searching code, reading and extracting fields from files, summarizing grep/search results, or simple classification of a passage. Applies at any stage of a task, not only during implementation. The reading done while clarifying a request, brainstorming or writing a plan is usually the heaviest of the whole task and belongs here too. It has no write access and cannot modify anything, so it is well suited to keeping large raw output in its own context and returning only the distilled conclusion to the main thread. Do not use it for any edit/write work (hand that to quick-io), and do not use it for architecture or design trade-offs (hand that to deepthink).
 tools: Read, Grep, Glob
 model: haiku
 effort: low
