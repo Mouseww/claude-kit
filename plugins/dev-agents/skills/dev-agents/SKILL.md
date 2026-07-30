@@ -164,10 +164,18 @@ history gets compacted and the spoken plan is dropped. The subagent returns and
 the main thread no longer knows steps 2 and 3 exist. A tracked task list survives
 compaction; a sentence in the transcript does not.
 
-## The nudge hook
+A hook pair backs this up (see below), but the rule stands on its own: the cost
+of a lost plan is redoing work, and the cost of the task list is a few seconds.
 
-`nudge-subagent-delegation` tracks two consecutive-operation counters in the main
-thread and speaks once past each threshold:
+## The hooks
+
+Three hooks ship with this pack. All are reminders. None of them ever blocks a
+tool call.
+
+### `nudge-subagent-delegation`
+
+Tracks two consecutive-operation counters in the main thread and speaks once past
+each threshold:
 
 | Streak | Default | Suggests |
 |---|---|---|
@@ -182,6 +190,23 @@ has to be redone. It never fires inside a subagent — `quick-read` reads a lot 
 design and has no `Agent` tool to act on the advice anyway.
 
 Tunables are at the top of `scripts/nudge-subagent-delegation.mjs`.
+
+### `track-task-plan` + `require-task-plan`
+
+A pair, communicating through a per-session flag file.
+
+- `track-task-plan` (PostToolUse on `TaskCreate`) records that a plan now exists.
+- `require-task-plan` (PreToolUse on `Agent`) checks for that record before a
+  subagent is dispatched, and reminds you to build a plan first if there is none.
+
+It fires on the first planless dispatch, then every third after that — enough
+pressure on genuine multi-step work without nagging a one-shot handoff. It never
+fires inside a subagent, so nested delegation is untouched. Creating a plan
+resets the counter, so if a plan is abandoned mid-session the reminder comes
+back rather than staying silenced.
+
+Set `REPEAT_EVERY = 1` at the top of `scripts/require-task-plan.mjs` to nudge on
+every planless dispatch instead.
 
 ## The honest limit: this does not control the main thread's model
 

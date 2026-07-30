@@ -22,4 +22,6 @@ jobs:
       - name: Validate repository structure
         run: node scripts/validate.mjs
       - name: Run tests
-        run: node --test plugins/context-trim/tests/truncate.test.mjs
+        # Quoted so node expands the glob, not the shell. Keeps new test files
+        # picked up automatically instead of needing a CI edit.
+        run: node --test "plugins/**/tests/*.test.mjs"

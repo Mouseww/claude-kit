@@ -101,12 +101,22 @@ Anything with non-trivial logic gets a test next to it under the pack's `tests/`
 using `node --test`. No test framework, no dependencies.
 
 ```bash
-node --test plugins/<name>/tests/<file>.test.mjs
+node --test "plugins/**/tests/*.test.mjs"     # everything
+node --test plugins/<name>/tests/<file>.test.mjs   # just one
 ```
 
-The `context-trim` suite is the model to follow: it asserts named invariants
-rather than exact output, so the algorithm can change without rewriting the
-tests.
+The glob is quoted so node expands it rather than the shell, which means a new
+test file needs no change to `package.json` or CI.
+
+Two suites to copy from, depending on what you are testing:
+
+- **`context-trim/tests/truncate.test.mjs`** — pure input/output. It asserts
+  named invariants rather than exact strings, so the algorithm can change
+  without rewriting the tests.
+- **`dev-agents/tests/task-plan.test.mjs`** — hooks that share state through
+  files. Each test uses its own session id and cleans up in `afterEach`; the
+  real temp directory is used rather than a fake one, because the path the
+  scripts resolve at import time is part of what is being tested.
 
 ## Versioning
 
@@ -118,7 +128,7 @@ enforces this; it is the only signal a user has that a reinstall is worth doing.
 
 ```bash
 node scripts/validate.mjs
-node --test plugins/context-trim/tests/truncate.test.mjs
+node --test "plugins/**/tests/*.test.mjs"
 ```
 
 Both run in CI, on GitHub Actions and Bitbucket Pipelines.

@@ -24,7 +24,7 @@ what is easy to get wrong.
 4. **Run both checks before saying the work is done:**
    ```bash
    node scripts/validate.mjs
-   node --test plugins/context-trim/tests/truncate.test.mjs
+   node --test "plugins/**/tests/*.test.mjs"
    ```
 
 ## Things that look like bugs but are not
@@ -37,6 +37,14 @@ what is easy to get wrong.
   port, costs nothing, and is the correct last line of defence. Keep it.
 - `scripts/enable-in-project.mjs` writes forward slashes into `settings.json`
   even on Windows, so the file is portable across a team.
+- `require-task-plan.mjs` emits `additionalContext` under a **PreToolUse**
+  `hookSpecificOutput`. That field is documented for UserPromptSubmit and
+  PostToolUse, and whether this Claude Code version honours it on PreToolUse is
+  unverified — a silently ignored payload is indistinguishable from a working
+  hook. The header comment says how to check. Do not "fix" it by switching to
+  `permissionDecision: "deny"`; blocking a dispatch over a missing task list
+  trades a small context loss for a hard failure, and the hook cannot tell a
+  one-step delegation from a ten-step one.
 
 ## Scope
 

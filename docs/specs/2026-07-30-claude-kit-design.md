@@ -142,6 +142,31 @@ checks so the class of bug cannot recur: a `skills/`, `agents/` or `commands/`
 directory containing nothing is an error, and a subdirectory of `skills/` without
 a `SKILL.md` is an error.
 
+### Also restored: the task-plan hook pair
+
+`track-task-plan` and `require-task-plan` existed only in the old standalone
+package and were never wired into the plugin, so the skill text referenced two
+hooks that did not ship. Ported to node and registered. Two deliberate
+deviations from the bash originals:
+
+- The session id is sanitized before being used in a filename. The original
+  interpolated it raw, so an id containing a path separator would have written
+  outside the state directory. There is a test for this.
+- The reminder is throttled to the first planless dispatch and then every third.
+  The original fired on *every* planless `Agent` call, which nags a legitimate
+  one-shot delegation every single time. `REPEAT_EVERY = 1` restores the old
+  behaviour.
+
+`require-task-plan` emits `additionalContext` under a PreToolUse
+`hookSpecificOutput`, which is documented for UserPromptSubmit and PostToolUse
+but unverified for PreToolUse. This is the same class of uncertainty as
+`updatedToolOutput` in `truncate-verbose-output.mjs`, and it is handled the same
+way: the assumption is stated in the header with a 30-second procedure to check
+it, rather than left implicit. Escalating to `permissionDecision: "deny"` was
+rejected — blocking a dispatch over a missing task list trades a small context
+loss for a hard failure, and the hook cannot tell a one-step delegation from a
+ten-step one.
+
 ## Known limits
 
 - `enable-in-project.mjs` defaults the marketplace source to this working copy's

@@ -43,9 +43,17 @@ as expensive as doing the work, and the honest limit — none of this controls
 which model the *main thread* uses when it writes files itself. For that you
 still want `/model opusplan`.
 
-And a **nudge hook**: after 16 consecutive Read/Grep/Glob calls, or 8 consecutive
-Edit/Write calls, it points out that the remaining work might be worth handing
-off. Once per threshold, never inside a subagent.
+**Three hooks**, all reminders, none of them ever blocking a tool call:
+
+| Hook | Fires | Says |
+|---|---|---|
+| `nudge-subagent-delegation` | 16 consecutive Read/Grep/Glob, or 8 consecutive Edit/Write | The remaining work might be worth handing off |
+| `require-task-plan` | Dispatching a subagent with no task plan yet | Build the plan first, or a long subagent run plus context compaction will lose your remaining steps |
+| `track-task-plan` | You create a task plan | Nothing; it just records that one exists, so the hook above stops asking |
+
+The task-plan pair fires on the first planless dispatch and then every third, so
+a one-shot delegation is not nagged every time. Neither ever fires inside a
+subagent, so nested delegation is untouched.
 
 ### `context-trim` — stop long command output from flooding the context
 
@@ -174,11 +182,12 @@ the rules the validator enforces.
 ## Checks
 
 ```bash
-node scripts/validate.mjs                                       # structure
-node --test plugins/context-trim/tests/truncate.test.mjs        # unit tests
+node scripts/validate.mjs                    # structure
+node --test "plugins/**/tests/*.test.mjs"    # unit tests (24 at last count)
 ```
 
-Both run in CI on Linux and Windows for every push.
+Both run in CI on Linux and Windows for every push. The test glob is quoted so
+node expands it, which means a new test file is picked up with no config change.
 
 ## Layout
 

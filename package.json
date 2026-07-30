@@ -10,7 +10,7 @@
   },
   "scripts": {
     "validate": "node scripts/validate.mjs",
-    "test": "node --test plugins/context-trim/tests/truncate.test.mjs",
+    "test": "node --test \"plugins/**/tests/*.test.mjs\"",
     "check": "npm run validate && npm test",
     "list": "node scripts/enable-in-project.mjs --list"
   }
