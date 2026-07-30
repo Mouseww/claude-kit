@@ -101,12 +101,14 @@ Anything with non-trivial logic gets a test next to it under the pack's `tests/`
 using `node --test`. No test framework, no dependencies.
 
 ```bash
-node --test "plugins/**/tests/*.test.mjs"     # everything
-node --test plugins/<name>/tests/<file>.test.mjs   # just one
+node --test "plugins/**/tests/*.test.mjs" "tests/*.test.mjs"   # everything
+node --test plugins/<name>/tests/<file>.test.mjs               # just one
 ```
 
-The glob is quoted so node expands it rather than the shell, which means a new
-test file needs no change to `package.json` or CI.
+Pack tests live in `plugins/<name>/tests/`; tests for the repository's own
+scripts live in the root `tests/`. The globs are quoted so node expands them
+rather than the shell, which means a new test file needs no change to
+`package.json` or CI.
 
 Two suites to copy from, depending on what you are testing:
 
@@ -128,7 +130,7 @@ enforces this; it is the only signal a user has that a reinstall is worth doing.
 
 ```bash
 node scripts/validate.mjs
-node --test "plugins/**/tests/*.test.mjs"
+node --test "plugins/**/tests/*.test.mjs" "tests/*.test.mjs"
 ```
 
 Both run in CI, on GitHub Actions and Bitbucket Pipelines.

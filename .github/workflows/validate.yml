@@ -24,4 +24,4 @@ jobs:
       - name: Run tests
         # Quoted so node expands the glob, not the shell. Keeps new test files
         # picked up automatically instead of needing a CI edit.
-        run: node --test "plugins/**/tests/*.test.mjs"
+        run: node --test "plugins/**/tests/*.test.mjs" "tests/*.test.mjs"

@@ -24,7 +24,7 @@ what is easy to get wrong.
 4. **Run both checks before saying the work is done:**
    ```bash
    node scripts/validate.mjs
-   node --test "plugins/**/tests/*.test.mjs"
+   node --test "plugins/**/tests/*.test.mjs" "tests/*.test.mjs"
    ```
 
 ## Things that look like bugs but are not
@@ -45,6 +45,24 @@ what is easy to get wrong.
   `permissionDecision: "deny"`; blocking a dispatch over a missing task list
   trades a small context loss for a hard failure, and the hook cannot tell a
   one-step delegation from a ten-step one.
+
+## Where guidance goes: block vs skill
+
+A pack has two places to put instructions, and they are not interchangeable:
+
+- **`claude-md-block.md`** is resident on every turn once synced. Put here only
+  what should change behaviour by default. It is a recurring token cost paid on
+  every request, so a test caps its size; raise that cap deliberately.
+- **`skills/<name>/SKILL.md`** loads only when invoked. Put the long reasoning,
+  the edge cases, and the tables here.
+
+Do not duplicate the block's content into the skill or vice versa. If something
+moves between them, remove it from the other.
+
+`scripts/sync-claude-md.mjs` is generic — any pack can ship a
+`claude-md-block.md` with `markers` and `supersedes` frontmatter and be synced by
+the same script. `supersedes` is what prevents a rename from leaving two
+contradictory blocks resident in one file; set it whenever a marker name changes.
 
 ## Scope
 

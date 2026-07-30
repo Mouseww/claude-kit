@@ -167,6 +167,44 @@ rejected — blocking a dispatch over a missing task list trades a small context
 loss for a hard failure, and the hook cannot tell a one-step delegation from a
 ten-step one.
 
+### Where guidance lives: CLAUDE.md block vs skill
+
+A skill body only enters context when the skill is invoked. A `CLAUDE.md` block
+is resident on every turn. That makes them different tools, and the split is
+deliberate:
+
+- The **block** (~2.6k characters, ~900 tokens, always on) carries what should
+  change behaviour by default: the delegation directive, the routing table, the
+  write handoff, the task-plan rule, and the honest exception list.
+- The **skill** (~12k characters, ~3.4k tokens, on demand) carries the reasoning
+  behind all of it.
+
+Measured against the alternative of putting everything in the skill: the skill
+alone changes nothing unless something loads it, and loading it costs nearly four
+times the block's permanent cost for one turn's benefit. The block is the
+mechanism; the skill is the reference.
+
+`scripts/sync-claude-md.mjs` installs it. It is generic — any pack can ship a
+`claude-md-block.md` with `markers` / `supersedes` frontmatter. `supersedes`
+exists because renaming `context-offload` to `dev-agents` would otherwise leave
+two contradictory delegation policies resident in the same file; the script
+replaces the superseded block **in place**, preserving wherever the user had put
+it.
+
+Safety, enforced by 20 tests: only bytes between markers are touched; line
+endings, BOM and trailing-newline state are preserved exactly; unbalanced or
+overlapping markers cause a refusal to write rather than a guess; a timestamped
+`.bak` precedes every write; re-running is a no-op. A test also caps the block's
+size, because it is a recurring cost on every request and growth there should be
+a decision rather than an accident.
+
+One judgement call worth recording: the first draft of the block replaced the old
+"DEFAULT TO DELEGATION ... reach for it early and often" opening with a purely
+descriptive "delegation serves two goals". That was more accurate but weaker as
+an always-on instruction — a description does not direct behaviour. The shipped
+block keeps the directive opening and adds the exception list, rather than
+trading one for the other.
+
 ## Known limits
 
 - `enable-in-project.mjs` defaults the marketplace source to this working copy's

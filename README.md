@@ -35,13 +35,28 @@ role, so you never pass a `model` parameter by hand.
 by its description. To be explicit, just say so — *"use quick-read to find every
 caller of `parseConfig`"*, *"hand the migration to devops-engineer"*.
 
-It also ships a **`dev-agents` skill** that Claude reads when it is deciding
-whether to delegate at all. That skill is the actual value: it covers when
+**The part that actually changes behaviour is the CLAUDE.md block, not the
+skill.** A skill body only enters context when the skill is invoked; a
+`CLAUDE.md` block is resident on every turn. So the pack ships both:
+
+```
+/dev-agents:sync-claude-md user      # or: project, or a path
+```
+
+That installs a ~2.4k-character delegation block between managed markers. It
+edits nothing outside those markers, writes a `.bak` first, is idempotent, and
+refuses to write if the markers are malformed rather than guessing. `--remove`
+takes it back out. If it finds an older `context-offload` block it replaces it
+in place, so you never end up with two contradictory delegation policies
+resident at once.
+
+The **`dev-agents` skill** is the long reference behind that block: when
 delegation is a net loss (small edits, anything needing back-and-forth with you,
 creating new content from scratch), how to brief an agent so the handoff is not
 as expensive as doing the work, and the honest limit — none of this controls
 which model the *main thread* uses when it writes files itself. For that you
-still want `/model opusplan`.
+still want `/model opusplan`. You rarely need to invoke it; the block covers
+day-to-day.
 
 **Three hooks**, all reminders, none of them ever blocking a tool call:
 
@@ -182,8 +197,8 @@ the rules the validator enforces.
 ## Checks
 
 ```bash
-node scripts/validate.mjs                    # structure
-node --test "plugins/**/tests/*.test.mjs"    # unit tests (24 at last count)
+node scripts/validate.mjs                                        # structure
+node --test "plugins/**/tests/*.test.mjs" "tests/*.test.mjs"     # 44 tests
 ```
 
 Both run in CI on Linux and Windows for every push. The test glob is quoted so

@@ -5,8 +5,16 @@ description: Use when a task is long or multi-step and you are deciding what to 
 
 # dev-agents
 
-Ten subagents with the model tier fixed per role, plus a hook that notices when
-the main thread has been grinding alone for too long.
+Ten subagents with the model tier fixed per role, three reminder hooks, and a
+`CLAUDE.md` block.
+
+**Read this only when you need the reasoning.** The pack's day-to-day behaviour
+comes from the `CLAUDE.md` block (`/dev-agents:sync-claude-md`), which is
+resident on every turn and carries the routing table and the write-handoff rule
+in about 2.4k characters. This document is the long-form justification behind it:
+why delegation works, when it is a net loss, and what it cannot do. Loading it
+costs roughly 3.4k tokens, so do not pull it in for a decision the block already
+answers.
 
 ## Why delegation works
 

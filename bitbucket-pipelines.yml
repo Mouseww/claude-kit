@@ -9,7 +9,7 @@ definitions:
           - node --version
           - node scripts/validate.mjs
           # Quoted so node expands the glob, not the shell.
-          - node --test "plugins/**/tests/*.test.mjs"
+          - node --test "plugins/**/tests/*.test.mjs" "tests/*.test.mjs"
 
 pipelines:
   default:
