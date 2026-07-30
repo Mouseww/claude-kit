@@ -1,0 +1,9 @@
+# Normalize to LF in the repository. This is a cross-platform repository whose
+# scripts are read on macOS, Linux and Windows; committing CRLF would churn the
+# diff every time a file is touched from a different machine.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.gif binary
+*.zip binary
