@@ -13,11 +13,11 @@ Delegation serves two separate goals. Most work triggers only one:
 
 Route by complexity:
 
-- Read-only search / extract / summarize -> `quick-read` (haiku; no write access, no Bash).
-- Edits that follow a rule you can state, or a change you have already decided -> `quick-io` (sonnet).
-- Design, trade-offs, hard debugging, plan or spec review -> `deepthink` (opus; writes design docs and ADRs, never implements).
+- Read-only search / extract / summarize -> `dev-agents:quick-read` (haiku; no write access, no Bash).
+- Edits that follow a rule you can state, or a change you have already decided -> `dev-agents:quick-io` (sonnet).
+- Design, trade-offs, hard debugging, plan or spec review -> `dev-agents:deepthink` (opus; writes design docs and ADRs, never implements).
 
-Role-scoped chunks: spec -> `requirements-analyst`; backend -> `backend-dev`; frontend -> `frontend-dev`; UI/UX and prototypes -> `ui-ux-designer`; tests -> `test-engineer`; code review, read-only -> `quality-reviewer`; CI/CD, deploy and migrations -> `devops-engineer`.
+Role-scoped chunks, all under the same `dev-agents:` prefix: spec -> `requirements-analyst`; backend -> `backend-dev`; frontend -> `frontend-dev`; UI/UX and prototypes -> `ui-ux-designer`; tests -> `test-engineer`; code review, read-only -> `quality-reviewer`; CI/CD, deploy and migrations -> `devops-engineer`.
 
 **The write handoff, the one most often missed.** Once you know what the code should be, writing it out is the expensive part, not the deciding. If you are about to type a substantial change you already understand, hand it over instead, and brief the agent with the **decision** — the interface, the rule, the file list, the constraint — not the finished code. A brief containing the code costs as much as writing it yourself. This applies mid-task, not only at the start: you do not have to hand over a whole feature to hand over one implementation step.
 

@@ -145,16 +145,36 @@ for (const entry of marketplace.plugins) {
   if (!plugin.version) warn(manifest, 'no "version"; bump it when the pack changes');
 
   // ---- hooks ----------------------------------------------------------------
-  if (plugin.hooks) {
-    const hooksFile = path.resolve(dir, plugin.hooks);
-    if (!fs.existsSync(hooksFile)) {
-      err(manifest, `"hooks" points at "${plugin.hooks}" which does not exist`);
-    } else {
-      const hooks = readJson(hooksFile);
-      if (hooks) checkHookCommands(hooks, hooksFile, dir);
+  // hooks/hooks.json is loaded automatically by Claude Code. Naming it in the
+  // manifest makes the plugin fail to load outright:
+  //   "Duplicate hooks file detected: ./hooks/hooks.json resolves to an
+  //    already-loaded file. The standard hooks/hooks.json is loaded
+  //    automatically, so manifest.hooks should only reference additional files."
+  // Both shipped packs had this and both were dead on arrival until the CLI said
+  // so. The manifest key is only for EXTRA hook files beyond the standard one.
+  const standardHooks = path.join(dir, 'hooks', 'hooks.json');
+  const declared = plugin.hooks ? [].concat(plugin.hooks) : [];
+
+  for (const entry of declared) {
+    const hooksFile = path.resolve(dir, entry);
+    if (path.resolve(standardHooks) === hooksFile) {
+      err(
+        manifest,
+        `"hooks" names the standard hooks/hooks.json, which is auto-loaded; the plugin will fail to load with a duplicate-hooks error. Remove the "hooks" key.`
+      );
+      continue;
     }
-  } else if (fs.existsSync(path.join(dir, 'hooks', 'hooks.json'))) {
-    warn(manifest, 'hooks/hooks.json exists but plugin.json has no "hooks" key; it will not load');
+    if (!fs.existsSync(hooksFile)) {
+      err(manifest, `"hooks" points at "${entry}" which does not exist`);
+      continue;
+    }
+    const hooks = readJson(hooksFile);
+    if (hooks) checkHookCommands(hooks, hooksFile, dir);
+  }
+
+  if (fs.existsSync(standardHooks)) {
+    const hooks = readJson(standardHooks);
+    if (hooks) checkHookCommands(hooks, standardHooks, dir);
   }
 
   // ---- empty capability directories ------------------------------------------
