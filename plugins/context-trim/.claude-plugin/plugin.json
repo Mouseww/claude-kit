@@ -1,0 +1,9 @@
+{
+  "name": "context-trim",
+  "displayName": "Context Trim",
+  "version": "1.0.0",
+  "description": "Truncates long command output before it reaches the model, keeping error context and the tail summary when something fails. Also logs per-subagent cost so you can check whether delegating pays off. No agents, no prompting, nothing to remember.",
+  "keywords": ["context", "token", "truncation", "cost", "hooks"],
+  "license": "MIT",
+  "hooks": "./hooks/hooks.json"
+}

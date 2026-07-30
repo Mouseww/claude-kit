@@ -1,0 +1,17 @@
+{
+  "name": "claude-kit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Personal Claude Code capability repository: skills, subagents, commands and hooks as installable plugins.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "test": "node --test plugins/context-trim/tests/truncate.test.mjs",
+    "check": "npm run validate && npm test",
+    "list": "node scripts/enable-in-project.mjs --list"
+  }
+}

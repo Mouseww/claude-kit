@@ -1,0 +1,25 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    # Windows is in the matrix on purpose: the whole point of the node-only rule
+    # is that hooks behave identically there, and a Linux-only CI would not catch
+    # a regression that reintroduces a POSIX assumption.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate repository structure
+        run: node scripts/validate.mjs
+      - name: Run tests
+        run: node --test plugins/context-trim/tests/truncate.test.mjs

@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Read|Grep|Glob|Edit|Write|Bash|Agent|Task|WebFetch|WebSearch|Skill|NotebookEdit|TodoWrite",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/nudge-subagent-delegation.mjs\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+node_modules/
+*.log
+
+# Backups written by scripts/enable-in-project.mjs
+*.bak
+settings.json.*.bak
+
+# Local-only Claude Code state
+.claude/settings.local.json
+
+# OS noise
+.DS_Store
+Thumbs.db

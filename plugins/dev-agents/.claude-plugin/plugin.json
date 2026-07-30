@@ -1,0 +1,9 @@
+{
+  "name": "dev-agents",
+  "displayName": "Dev Agents",
+  "version": "1.0.0",
+  "description": "Ten subagents with the model tier bound per role, so read-only exploration runs on haiku and only real design judgement runs on opus. Includes a delegation strategy skill and a nudge hook. Does NOT replace /model opusplan for getting code implementation onto a cheaper tier; see the skill.",
+  "keywords": ["subagent", "delegation", "cost", "agents"],
+  "license": "MIT",
+  "hooks": "./hooks/hooks.json"
+}

@@ -1,0 +1,18 @@
+# CI for claude-kit. No dependencies to install: every check is plain node.
+image: node:22
+
+definitions:
+  steps:
+    - step: &check
+        name: validate + test
+        script:
+          - node --version
+          - node scripts/validate.mjs
+          - node --test plugins/context-trim/tests/truncate.test.mjs
+
+pipelines:
+  default:
+    - step: *check
+  pull-requests:
+    "**":
+      - step: *check

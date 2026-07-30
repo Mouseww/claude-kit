@@ -1,0 +1,35 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-kit",
+  "description": "Personal Claude Code capability repository: skills, subagents, commands and hooks, packaged as installable plugins.",
+  "owner": {
+    "name": "webber_wei"
+  },
+  "metadata": {
+    "description": "Personal Claude Code capability repository",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "claude-kit-meta",
+      "source": "./plugins/claude-kit-meta",
+      "description": "Install and manage claude-kit itself. Provides /claude-kit-meta:install-here to enable chosen plugins for the current project, /claude-kit-meta:list to see what is available, and /claude-kit-meta:new-plugin to scaffold a new capability pack.",
+      "category": "productivity",
+      "tags": ["meta", "installer", "scaffold"]
+    },
+    {
+      "name": "context-trim",
+      "source": "./plugins/context-trim",
+      "description": "Truncates long command output before it reaches the model, keeping error context and the tail summary when something fails. Also logs per-subagent cost so you can check whether delegating pays off. No agents, no prompting, nothing to remember.",
+      "category": "productivity",
+      "tags": ["context", "token", "truncation", "cost", "hooks"]
+    },
+    {
+      "name": "dev-agents",
+      "source": "./plugins/dev-agents",
+      "description": "Ten subagents with the model tier bound per role, so read-only exploration runs on haiku and only real design judgement runs on opus. Includes a delegation nudge hook.",
+      "category": "productivity",
+      "tags": ["subagent", "delegation", "cost", "agents"]
+    }
+  ]
+}
