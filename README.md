@@ -213,6 +213,43 @@ agents do not show up, restart the session.
 Once this repository lives on a remote, the same command takes the URL instead of
 the local path. Nothing inside the repository changes.
 
+### Updating after this repository changes
+
+Editing a pack here does not change what is installed. To make an edit land, bump
+the pack's `version` in `plugins/<pack>/.claude-plugin/plugin.json`, then from the
+repository root:
+
+```bash
+node scripts/validate.mjs
+claude plugin marketplace update claude-kit
+claude plugin update dev-agents@claude-kit
+```
+
+Then **restart the session**. If the pack ships a resident block, sync it too:
+
+```
+/dev-agents:sync-claude-md --target user
+```
+
+Swap `dev-agents` for whichever pack you edited. That is the whole flow.
+
+Three ways it silently does nothing, all of them quiet:
+
+- **You skipped the version bump.** The update then has nothing to do and the old
+  copy keeps loading. Bump first, every time.
+- **You skipped the restart.** Agents and skills are read once at startup.
+- **You dropped `--target user`.** The default writes a *second* block into the
+  current directory instead of updating the one in `~/.claude/CLAUDE.md`, and both
+  then load on every turn.
+
+Run `node scripts/validate.mjs` even for a one-word edit. A stray `": "` inside an
+agent's `description` silently voids its entire frontmatter, so the agent loses
+its model and tools and nothing complains. Only the validator sees it.
+
+To check which copy is live, read the pack's `installPath` in
+`~/.claude/plugins/installed_plugins.json`. `claude plugin list` does not show
+versions.
+
 ### Per project, so the whole team gets it
 
 A marketplace is user-level: `/plugin install` affects *your* machine, every

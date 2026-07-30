@@ -123,8 +123,14 @@ Two suites to copy from, depending on what you are testing:
 ## Versioning
 
 Bump `version` in the pack's `plugin.json` when its behaviour changes. Bump
-`metadata.version` in `marketplace.json` when packs are added or removed. Nothing
-enforces this; it is the only signal a user has that a reinstall is worth doing.
+`metadata.version` in `marketplace.json` when packs are added or removed.
+
+The bump is not bookkeeping. An installed pack is a copy keyed on that version, so
+without a bump `claude plugin update` has nothing to do, the edit reaches nobody
+including you, and no command reports a problem. It has already happened here: the
+cache held a `dev-agents` 1.2.1 several commits behind the 1.2.1 on `master`.
+
+Full steps: "Updating after this repository changes" in `README.md`.
 
 ## Before committing
 
