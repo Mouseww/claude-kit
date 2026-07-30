@@ -207,6 +207,19 @@ trading one for the other.
 
 ## Known limits
 
+- **Proactive delegation is surface-dependent, and this pack cannot change that.**
+  Measured 2026-07-30 by probing both surfaces with the same installed plugin: a
+  standalone terminal `claude` session carries only the stock "subagents should
+  not be used excessively when not needed" guidance and dispatches agents on its
+  own; the Claude desktop app injects a product-level *"Do not call the AgentTool
+  unless the user requested it"*, which outranks any `CLAUDE.md` block. The rule
+  is not in `~/.claude/`, `~/.claude.json`, project settings, output styles,
+  `%APPDATA%\Claude`, or any managed-policy path — it comes from the app's
+  embedding of the harness and cannot be removed by the user. Explicit
+  ("user requested it") delegation still works there, and `context-trim` is
+  unaffected because it never passes through the model. Worth re-checking when
+  the app updates.
+
 - `enable-in-project.mjs` defaults the marketplace source to this working copy's
   absolute path, which is correct for one machine and wrong for a team. Teams
   pass `--source git --url <url>`. Making that the default requires a remote

@@ -7,7 +7,7 @@
   },
   "metadata": {
     "description": "Personal Claude Code capability repository",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "plugins": [
     {
@@ -30,6 +30,13 @@
       "description": "Ten subagents with the model tier bound per role, so read-only exploration runs on haiku and only real design judgement runs on opus. Includes a delegation strategy skill that says which agent to pick and how to brief it, plus three reminder hooks: one when the main thread has been grinding alone too long, and a pair that asks for a task plan before a subagent is dispatched so a long run plus context compaction cannot lose your remaining steps.",
       "category": "productivity",
       "tags": ["subagent", "delegation", "cost", "agents", "task-plan"]
+    },
+    {
+      "name": "fleet-engineering",
+      "source": "./plugins/fleet-engineering",
+      "description": "Agent-first development methodology for teams, where several people and their agents work parallel branches without corrupting each other's code or docs. Removes every single-writer assumption: ticket IDs instead of sequential numbering, generated indexes and dashboards instead of hand-edited ones, a docs-first PR to main whose machine-readable Claims section acts as the coordination lock, and an adversarial evaluator that must PASS before a code PR opens. Ships the evaluator as a ready-to-use subagent plus the document and infrastructure templates (product spec, design doc, execution plan, tech debt, quality area, docs linter, CODEOWNERS, CI workflow) plus a .NET stack guide.",
+      "category": "workflow",
+      "tags": ["methodology", "team", "process", "docs", "planning", "audit"]
     }
   ]
 }

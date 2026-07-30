@@ -8,7 +8,7 @@ installed anywhere with one command instead of copied around.
 
 ## What you get
 
-Three packs. Install them separately; they are useful on their own and better
+Four packs. Install them separately; they are useful on their own and better
 together.
 
 ### `dev-agents` — ten subagents with the cost profile fixed per role
@@ -32,8 +32,25 @@ role, so you never pass a `model` parameter by hand.
 | `devops-engineer` | sonnet | CI/CD, containers, migrations, rollback |
 
 **How you use it.** Mostly you do not have to do anything: Claude picks an agent
-by its description. To be explicit, just say so — *"use quick-read to find every
-caller of `parseConfig`"*, *"hand the migration to devops-engineer"*.
+by its description. To be explicit, just say so — *"use dev-agents:quick-read to
+find every caller of `parseConfig`"*, *"hand the migration to
+dev-agents:devops-engineer"*.
+
+> **Surface caveat, measured 2026-07-30.** Whether delegation happens *on its
+> own* depends on which Claude Code surface you are in. A standalone terminal
+> `claude` session carries only the stock "do not overuse subagents" guidance and
+> dispatches agents by itself. The Claude desktop app injects a stricter
+> product-level rule — *"Do not call the AgentTool unless the user requested
+> it"* — which suppresses proactive dispatch regardless of what this pack's
+> `CLAUDE.md` block says. It is not a user setting and cannot be removed.
+>
+> Consequence: in the desktop app, name the agent explicitly — that path is still
+> allowed. For long multi-file work where automatic delegation is the whole
+> point, run `claude` in a terminal. `context-trim`'s truncation is unaffected
+> either way, because it never passes through the model.
+>
+> Check your own surface by asking a session: *"do your instructions restrict
+> calling the Agent tool?"*
 
 **The part that actually changes behaviour is the CLAUDE.md block, not the
 skill.** A skill body only enters context when the skill is invoked; a
@@ -108,6 +125,58 @@ To tune thresholds, edit the constants at the top of
 `plugins/context-trim/scripts/truncate-verbose-output.mjs`. Read the
 `context-trim` skill first (`/plugin` → the skill, or just ask Claude about it).
 
+### `fleet-engineering` — a team process that parallel agents cannot corrupt
+
+One skill, but a large one: the methodology for running agent-first development
+when more than one person commits to the repo. A solo harness quietly assumes a
+single writer — sequential file numbering, hand-edited index files, one shared
+dashboard, advisory "check for conflicts" steps. Two people working the same day
+break all four. This pack removes the assumption rather than asking people to be
+careful:
+
+| Single-writer habit | What replaces it |
+|---|---|
+| `docs/exec-plans/active/014-foo.md` | `{TICKET}-{slug}.md`; IDs come from the ticket system, never from counting files |
+| Hand-edited `index.md`, one `QUALITY_SCORE.md` | Generated from per-doc frontmatter, CI-checked, hand-edits blocked by a hook |
+| "Check `active/` before you start" | Every plan declares a **Claims** section; it merges to main *before* implementation and CI warns on overlap |
+| Process lives on one person's machine | Skill, evaluator agent, docs linter, hooks and CODEOWNERS are committed and reviewed like code |
+
+The gate that does the most work is **Step E**: the agent that wrote the code is
+not allowed to sign it off. An independent `fleet-evaluator` subagent must return
+`PASS` — zero blockers, zero majors, max three rounds — before a code PR is
+opened, and the main agent may never override a blocker. Human review still
+happens after that; the evaluator is the precondition, not a replacement.
+
+Ships the templates the process needs (product spec, design doc, execution plan
+with Claims, tech debt entry, quality area, `docs_lint.py`, CODEOWNERS, the
+generated-file-blocking hook) plus a .NET stack guide with architecture rules,
+architecture tests and a CI workflow. Everything else is language-agnostic. The
+evaluator ships as a real agent, `fleet-engineering:fleet-evaluator`, so Step E
+works the moment you install the pack — nothing to scaffold first.
+
+**Installing at user level is enough to work this way.** The skill, every
+template and the evaluator are all live on every project on the machine as soon
+as `/plugin install` finishes. Principle 12 ("the process is in the repo") is not
+a claim that a user-level install is inert; it is about what a *team* needs, and
+it only bites on three things:
+
+| Thing | Why user level is not enough for a team |
+|---|---|
+| `tools/docs_lint.py` | CI runs it. A copy on your laptop cannot gate anyone's PR |
+| `CODEOWNERS`, the CI workflow, the generated-file hook | Same: they only enforce anything from inside the repo |
+| The skill and evaluator *versions* | Each teammate installing their own copy is exactly the process drift principle 12 exists to stop |
+
+So: install the pack for yourself and use it today. When a team adopts it, run
+the skill's Project Initialization as well, which copies the skill into
+`{repo}/.claude/skills/` and the evaluator into `{repo}/.claude/agents/` — at
+which point the plain `fleet-evaluator` id resolves to the repo's pinned copy and
+everyone audits against the same version.
+
+One dependency note: the shipped `docs_lint.py` and `block-generated-docs.py`
+templates are Python. That does not violate this repo's node-only rule — they are
+payload for the target repository, not hooks of this one — but the team adopting
+them needs Python 3 in CI.
+
 ### `claude-kit-meta` — manage this repository from inside Claude
 
 | Command | Does |
@@ -133,6 +202,7 @@ Then install what you want:
 ```
 /plugin install dev-agents@claude-kit
 /plugin install context-trim@claude-kit
+/plugin install fleet-engineering@claude-kit
 /plugin install claude-kit-meta@claude-kit
 ```
 
