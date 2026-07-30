@@ -157,6 +157,32 @@ for (const entry of marketplace.plugins) {
     warn(manifest, 'hooks/hooks.json exists but plugin.json has no "hooks" key; it will not load');
   }
 
+  // ---- empty capability directories ------------------------------------------
+  // An empty skills/ or agents/ directory means the pack advertises something it
+  // does not ship. This is not hypothetical: dev-agents shipped an empty
+  // skills/dev-agents/ for months while its plugin.json claimed "includes a
+  // delegation strategy skill". Nothing surfaced the discrepancy, and git does
+  // not track empty directories, so it was invisible in review too.
+  for (const sub of ['skills', 'agents', 'commands']) {
+    const capDir = path.join(dir, sub);
+    if (!fs.existsSync(capDir)) continue;
+    const found = walk(capDir, (n) => n.endsWith('.md'));
+    if (found.length === 0) {
+      err(capDir, `directory exists but ships nothing; delete it or add content`);
+    }
+  }
+  // A skill is a directory holding SKILL.md. A subdirectory of skills/ without
+  // one is a half-created skill that will never load.
+  const skillsRoot = path.join(dir, 'skills');
+  if (fs.existsSync(skillsRoot)) {
+    for (const entry of fs.readdirSync(skillsRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      if (!fs.existsSync(path.join(skillsRoot, entry.name, 'SKILL.md'))) {
+        err(path.join(skillsRoot, entry.name), 'no SKILL.md, so this skill cannot load');
+      }
+    }
+  }
+
   // ---- skills ---------------------------------------------------------------
   for (const skill of walk(path.join(dir, 'skills'), (n) => n === 'SKILL.md')) {
     const fm = frontmatter(skill);

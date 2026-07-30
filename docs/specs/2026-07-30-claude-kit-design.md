@@ -128,6 +128,20 @@ The dangling-hook check earns its place: a hook command pointing at a missing
 file fails silently on every single tool call, with no error surfaced anywhere.
 It caught a real instance during implementation.
 
+### Found during implementation: dev-agents shipped an empty skill
+
+`plugins/dev-agents/skills/dev-agents/` was an empty directory while
+`plugin.json` claimed the pack "includes a delegation strategy skill". The skill
+text existed only in the old standalone `context-offload/` package, written
+against an install mechanism (`install.sh`, `settings-snippet.json`) that no
+longer applies. Git does not track empty directories, so the gap was invisible in
+review as well as at runtime.
+
+It was rewritten for the plugin form and now ships. The validator gained two
+checks so the class of bug cannot recur: a `skills/`, `agents/` or `commands/`
+directory containing nothing is an error, and a subdirectory of `skills/` without
+a `SKILL.md` is an error.
+
 ## Known limits
 
 - `enable-in-project.mjs` defaults the marketplace source to this working copy's

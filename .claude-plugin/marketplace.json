@@ -27,7 +27,7 @@
     {
       "name": "dev-agents",
       "source": "./plugins/dev-agents",
-      "description": "Ten subagents with the model tier bound per role, so read-only exploration runs on haiku and only real design judgement runs on opus. Includes a delegation nudge hook.",
+      "description": "Ten subagents with the model tier bound per role, so read-only exploration runs on haiku and only real design judgement runs on opus. Includes a delegation strategy skill that says which agent to pick and how to brief it, plus a hook that notices when the main thread has been grinding alone too long.",
       "category": "productivity",
       "tags": ["subagent", "delegation", "cost", "agents"]
     }
