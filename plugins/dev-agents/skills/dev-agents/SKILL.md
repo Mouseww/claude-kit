@@ -11,7 +11,7 @@ Ten subagents with the model tier fixed per role, three reminder hooks, and a
 **Read this only when you need the reasoning.** The pack's day-to-day behaviour
 comes from the `CLAUDE.md` block (`/dev-agents:sync-claude-md`), which is
 resident on every turn and carries the routing table and the write-handoff rule
-in about 3.7k characters. This document is the long-form justification behind it:
+in about 3.5k characters. This document is the long-form justification behind it:
 why delegation works, when it is a net loss, and what it cannot do. Loading it
 costs roughly 3.6k tokens, so do not pull it in for a decision the block already
 answers.

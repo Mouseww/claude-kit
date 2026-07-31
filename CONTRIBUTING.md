@@ -130,7 +130,14 @@ without a bump `claude plugin update` has nothing to do, the edit reaches nobody
 including you, and no command reports a problem. It has already happened here: the
 cache held a `dev-agents` 1.2.1 several commits behind the 1.2.1 on `master`.
 
-Full steps: "Updating after this repository changes" in `README.md`.
+**Bump as the last step before committing, not the first.** Bump early, keep
+editing, and someone can install an intermediate state under the final version
+number. No later `claude plugin update` repairs that, because the version already
+matches and the update becomes a no-op. This has also happened here: a `dev-agents`
+1.2.2 was installed with a `claude-md-block.md` that a later commit shortened, and
+the only way out was 1.2.3.
+
+Full steps: "Maintaining this repository" in `README.md`.
 
 ## Before committing
 
