@@ -111,8 +111,11 @@ it passes the output through untouched.
 `~/.claude/context-offload-metrics.jsonl`. Read the report with:
 
 ```bash
-node ~/projects/claude-kit/plugins/context-trim/scripts/report-metrics.mjs
+node plugins/context-trim/scripts/report-metrics.mjs
 ```
+
+Run that from a clone of this repository, or from the pack's installed copy under
+`~/.claude/plugins/cache/`.
 
 It answers three things that are otherwise invisible: which agents you never
 actually use (delete them), how much context each delegation hands back (an agent
@@ -191,10 +194,22 @@ them needs Python 3 in CI.
 
 ### Once per machine
 
-In any Claude Code session:
+This repository is private, so `git` on your machine needs Bitbucket credentials
+before Claude Code can clone it. Check that first:
+
+```bash
+git clone --depth 1 https://bitbucket.org/rspcode/context-kit.git context-kit-check
+```
+
+If that works, delete the directory and carry on. If it fails on authentication,
+create a Bitbucket app password and store it in your credential helper, or set git
+up to reach `bitbucket.org` over SSH. Claude Code clones with whatever credentials
+git already has; it has none of its own.
+
+Then, in any Claude Code session:
 
 ```
-/plugin marketplace add C:/Users/webber_wei/projects/claude-kit
+/plugin marketplace add https://bitbucket.org/rspcode/context-kit.git
 ```
 
 Then install what you want:
@@ -206,45 +221,60 @@ Then install what you want:
 /plugin install claude-kit-meta@claude-kit
 ```
 
+The repository is named `context-kit`; the marketplace it declares is `claude-kit`.
+Install ids use the marketplace name, so `@claude-kit` is right and not a typo.
+
 Verify with `/plugin` (packs listed and enabled), `/agents` (the ten agents
 appear), and `/hooks` (the truncation and nudge hooks are registered). If the
 agents do not show up, restart the session.
 
-Once this repository lives on a remote, the same command takes the URL instead of
-the local path. Nothing inside the repository changes.
+Editing the packs yourself? Point the marketplace at your own clone instead of the
+URL and your edits are visible without pushing:
 
-### Updating after this repository changes
+```
+/plugin marketplace add /absolute/path/to/your/clone
+```
 
-Editing a pack here does not change what is installed. To make an edit land, bump
-the pack's `version` in `plugins/<pack>/.claude-plugin/plugin.json`, then from the
-repository root:
+### Updating
+
+**If you only use the packs.** Once a change has been pushed:
 
 ```bash
-node scripts/validate.mjs
 claude plugin marketplace update claude-kit
 claude plugin update dev-agents@claude-kit
 ```
 
-Then **restart the session**. If the pack ships a resident block, sync it too:
+Then **restart the session**. If the pack ships a resident block, re-sync it:
 
 ```
 /dev-agents:sync-claude-md --target user
 ```
 
-Swap `dev-agents` for whichever pack you edited. That is the whole flow.
+Swap `dev-agents` for whichever pack you want. That is the whole flow.
 
-Three ways it silently does nothing, all of them quiet:
+**If you edit the packs.** An edit reaches nobody until the version moves. Bump the
+pack's `version` in `plugins/<pack>/.claude-plugin/plugin.json`, run the checks from
+the repository root, then commit and push:
 
-- **You skipped the version bump.** The update then has nothing to do and the old
-  copy keeps loading. Bump first, every time.
-- **You skipped the restart.** Agents and skills are read once at startup.
-- **You dropped `--target user`.** The default writes a *second* block into the
-  current directory instead of updating the one in `~/.claude/CLAUDE.md`, and both
-  then load on every turn.
+```bash
+node scripts/validate.mjs
+node --test "plugins/**/tests/*.test.mjs" "tests/*.test.mjs"
+```
 
-Run `node scripts/validate.mjs` even for a one-word edit. A stray `": "` inside an
-agent's `description` silently voids its entire frontmatter, so the agent loses
-its model and tools and nothing complains. Only the validator sees it.
+Then run the two update commands above like anyone else.
+
+Three ways this silently does nothing, all of them quiet:
+
+- **The version was not bumped.** The update has nothing to do and the old copy
+  keeps loading. Bump every time, even for a one-word change.
+- **The session was not restarted.** Agents and skills are read once at startup.
+- **`--target user` was dropped.** The default writes a *second* block into the
+  current directory instead of updating the one in `~/.claude/CLAUDE.md`, and then
+  both load on every turn.
+
+Run the validator even for a one-word edit. A stray `": "` inside an agent's
+`description` silently voids its whole frontmatter, so the agent loses its model
+and tools and nothing complains. Only the validator sees it.
 
 To check which copy is live, read the pack's `installPath` in
 `~/.claude/plugins/installed_plugins.json`. `claude plugin list` does not show
@@ -266,7 +296,14 @@ From inside the target project:
 Or directly, no plugin required:
 
 ```bash
-node C:/Users/webber_wei/projects/claude-kit/scripts/enable-in-project.mjs --project . --plugins dev-agents,context-trim --dry-run
+node scripts/enable-in-project.mjs --project /path/to/the/project --plugins dev-agents,context-trim --dry-run
+```
+
+Run that from a clone of this repository. By default it registers *your* clone's
+path, which is wrong for anyone else on the team, so point it at Bitbucket instead:
+
+```bash
+--source git --url https://bitbucket.org/rspcode/context-kit.git
 ```
 
 Drop `--dry-run` to apply. It deep-merges into existing settings, never removes a
