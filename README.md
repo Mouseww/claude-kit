@@ -198,7 +198,7 @@ This repository is private, so `git` on your machine needs Bitbucket credentials
 before Claude Code can clone it. Check that first:
 
 ```bash
-git clone --depth 1 https://bitbucket.org/rspcode/context-kit.git context-kit-check
+git clone --depth 1 https://bitbucket.org/rspcode/claude-kit.git claude-kit-check
 ```
 
 If that works, delete the directory and carry on. If it fails on authentication,
@@ -209,7 +209,7 @@ git already has; it has none of its own.
 Then, in any Claude Code session:
 
 ```
-/plugin marketplace add https://bitbucket.org/rspcode/context-kit.git
+/plugin marketplace add https://bitbucket.org/rspcode/claude-kit.git
 ```
 
 Then install what you want:
@@ -220,9 +220,6 @@ Then install what you want:
 /plugin install fleet-engineering@claude-kit
 /plugin install claude-kit-meta@claude-kit
 ```
-
-The repository is named `context-kit`; the marketplace it declares is `claude-kit`.
-Install ids use the marketplace name, so `@claude-kit` is right and not a typo.
 
 Verify with `/plugin` (packs listed and enabled), `/agents` (the ten agents
 appear), and `/hooks` (the truncation and nudge hooks are registered). If the
@@ -303,7 +300,7 @@ Run that from a clone of this repository. By default it registers *your* clone's
 path, which is wrong for anyone else on the team, so point it at Bitbucket instead:
 
 ```bash
---source git --url https://bitbucket.org/rspcode/context-kit.git
+--source git --url https://bitbucket.org/rspcode/claude-kit.git
 ```
 
 Drop `--dry-run` to apply. It deep-merges into existing settings, never removes a
