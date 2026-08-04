@@ -74,14 +74,24 @@ orthogonal, so nothing here belongs in that sequence.
 
 | Agent | Model | For |
 |---|---|---|
-| `quick-read` | haiku | Read-only: search, extract, summarize. No write access, no Bash |
-| `quick-io` | sonnet | Mechanical file changes that follow a rule you can state |
+| `quick-read` | haiku | Read-only: search, extract, summarize, plus inspection commands (`git log`, `git diff`, reading a log). No Edit/Write |
+| `quick-io` | sonnet | Mechanical file changes that follow a rule you can state. Has Bash, so it can format, move files, and run a targeted check on what it touched |
 | `deepthink` | opus | Design judgement, trade-offs, hard diagnosis. Writes conclusions, never implements |
 
 haiku is on the read-only role rather than on `quick-io` deliberately: its error
-rate on writes is noticeably higher, and a read that goes wrong cannot damage
-anything. You get the cheap tier without gambling code quality on it. Both
-primitives are told to hand work back when it turns out to need judgement.
+rate on writes is noticeably higher, and a read that goes wrong costs you a wrong
+answer rather than a damaged file. You get the cheap tier without gambling code
+quality on it. Both primitives are told to hand work back when it turns out to
+need judgement.
+
+Both have Bash, because command output — a build log, a test run, `git log` — is
+the heaviest raw output there is, and the whole point of these agents is that it
+lands in their context rather than yours. The split is what they may run:
+`quick-read` is confined to inspection commands, `quick-io` may also format,
+move files, and run a targeted check on what it just edited. Note that this
+split is enforced by their prompts, not by the tool grant — `Bash` is all or
+nothing in agent frontmatter. If you need it enforced mechanically, deny the
+commands in `permissions` rather than relying on the agent text.
 
 `deepthink` has `Write` so it can produce a design doc, ADR or analysis, but its
 guardrail is that it produces **only** those documents. It does not touch source
