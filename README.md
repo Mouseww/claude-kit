@@ -37,6 +37,10 @@ Then, in any Claude Code session:
 Install only the packs you want; they work on their own and better together.
 Restart the session if the agents do not show up under `/agents`.
 
+`/plugin` is an interactive panel, so it exists only in a `claude` terminal. In the
+desktop app use the CLI form of the same commands: `claude plugin marketplace add
+<url>`, then `claude plugin install <pack>@claude-kit`.
+
 **One extra step for `dev-agents`, and it is the one that matters:**
 
 ```
@@ -198,9 +202,34 @@ one-word edit: a stray `": "` inside an agent's `description` silently voids its
 whole frontmatter, so the agent loses its model and tools and nothing complains.
 Only the validator sees it.
 
-Commit, push, then update like anyone else. To check which copy is actually live,
-read the pack's `installPath` in `~/.claude/plugins/installed_plugins.json`;
-`claude plugin list` does not show versions.
+Commit, then update:
+
+```bash
+claude plugin marketplace update claude-kit
+claude plugin update <pack>@claude-kit
+```
+
+Restart the session afterwards, and re-run `sync-claude-md` for a pack that ships
+a resident block. Three things go wrong here, all of them quietly:
+
+**The push is not what makes your own copy update.** If you added the marketplace
+by path rather than by URL, its `source` in `known_marketplaces.json` is
+`directory` and points at your clone, so the local update reads this working copy
+and Bitbucket never enters into it. Push for everyone else, not for yourself.
+
+**`@claude-kit` is not optional.** A bare `claude plugin update dev-agents` has to
+guess which pack you mean across every installed marketplace. On 2026-08-04 it
+answered `claude-kit-meta is already at the latest version (1.0.0)` and left
+`dev-agents` on the old version, having never looked at it. The reply reads like
+success.
+
+**`/plugin` is an interactive panel, and the desktop app has no place to draw it.**
+The slash commands in "Install" above work in a `claude` terminal; everywhere else
+use the `claude plugin ...` CLI, which is the same functionality without the UI.
+
+To check which copy is actually live, read the pack's `installPath` in
+`~/.claude/plugins/installed_plugins.json`; `claude plugin list` does not show
+versions.
 
 **Adding a pack:** `/claude-kit-meta:new-plugin <name> <one-line description>`. By
 hand it is four steps: copy `templates/plugin-template/`, fill in `plugin.json`,
