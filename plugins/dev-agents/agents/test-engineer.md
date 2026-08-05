@@ -15,11 +15,27 @@ Use the test framework and conventions already in the repository. Keep tests iso
 
 Browser automation: `mcp__Playwright__*` (navigate, click, type, fill_form, snapshot, take_screenshot, console_messages, network_requests, wait_for) for repeatable, scriptable UI and E2E tests.
 
-Two other browser toolsets are deliberately NOT granted here, because granting a tool loads its schema into your context on every invocation and three overlapping toolsets is a large recurring cost for capability that is rarely needed:
-- `mcp__chrome-devtools` adds performance traces, memory snapshots, and Lighthouse audits.
-- `mcp__Claude_Browser` adds preview against a dev server registered in `.claude/launch.json`.
-If a task genuinely needs one, ask the caller to add it to this agent's `tools` line. See the plugin README.
+If a task needs DevTools profiling or a dev-server preview, ask the caller to add the relevant tool.
 
 Do not implement the business functionality under test, hand that to `dev-agents:backend-dev` or `dev-agents:frontend-dev`.
 
-Return: pass/fail summary, coverage or gaps, `file:line` of any failure and its likely cause, the report path, and open questions. Not a log transcript. If anything is incomplete, say what and why.
+Return a JSON object:
+
+```json
+{
+  "verdict": "pass | fail",
+  "summary": "one-sentence overall result",
+  "results": [
+    {
+      "test": "test name or path",
+      "status": "pass | fail | skip",
+      "file": "relative/path.ext:LINE",
+      "cause": "likely cause if failed, null if passed"
+    }
+  ],
+  "coverage_gaps": ["area or file not covered"],
+  "report_path": "path if a report was written, null otherwise"
+}
+```
+
+If anything is incomplete, say what and why.

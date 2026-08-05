@@ -152,6 +152,12 @@ passing the decision down is the intended use, not a compromise.
 When each remaining edit needs a fresh judgement call, keep going in the main
 thread. That is a legitimate answer, not a failure to delegate.
 
+## When the choice is ambiguous
+
+When you are unsure which agent to use, prefer the lower-tier option: `quick-io` over a role agent, a role agent over `deepthink`. The cheaper agent will escalate if the task turns out to need more judgment, and the escalation costs less than a wrong-tier invocation that wastes an opus call on mechanical work.
+
+For the two opus agents: vague request in, structured spec out -> `requirements-analyst`. Proposal or plan in, verdict or recommendation out -> `deepthink`.
+
 ## When not to delegate
 
 Not everything should go to a subagent.

@@ -1,8 +1,9 @@
 ---
 name: fleet-evaluator
-description: Independent auditor for the fleet-engineering Post-Implementation Audit (Step E). Spawned by the main agent at the end of every development request (one audit per exec-plan phase) to adversarially verify that the exec plan, design doc, product spec, code, tests, claims, and quality artifacts are consistent and the Definition of Done is actually met. Does NOT modify any files; review-only. Returns a structured verdict. This is the pack's copy, so Step E works the moment the plugin is installed; a team project should still commit its own {repo}/.claude/agents/fleet-evaluator.md from the skill template, so every teammate audits against the same version.
+description: Independent auditor for the fleet-engineering Post-Implementation Audit (Step E). Spawned by the main agent at the end of every development request (one audit per exec-plan phase) to adversarially verify that the exec plan, design doc, product spec, code, tests, claims, and quality artifacts are consistent and the Definition of Done is actually met. Does NOT modify any files; review-only. Returns a structured verdict.
 tools: Read, Grep, Glob, Bash
 model: sonnet
+effort: medium
 ---
 
 # Role
