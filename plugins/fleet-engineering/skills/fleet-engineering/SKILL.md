@@ -1,5 +1,6 @@
 ---
 name: fleet-engineering
+disable-model-invocation: true
 description: |
   Fleet engineering methodology: agent-first development for TEAMS, with mechanical enforcement
   and conflict-free-by-construction collaboration. The team-scale evolution of harness-engineering
