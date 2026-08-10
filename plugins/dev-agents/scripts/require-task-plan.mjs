@@ -9,17 +9,20 @@
 // This is a reminder, not a block. It never denies the tool call.
 //
 // ============================================================================
-// VERIFY THIS ACTUALLY FIRES
+// VERIFIED TO FIRE (2026-08-05)
 // ============================================================================
 // The bash original emitted `additionalContext` under a PreToolUse
-// hookSpecificOutput. That field is documented for UserPromptSubmit and
-// PostToolUse; whether this Claude Code version honours it on PreToolUse is not
-// something the script can detect, and a silently ignored payload looks exactly
-// like a working hook from here.
+// hookSpecificOutput. That field is only documented for UserPromptSubmit and
+// PostToolUse, so this was long marked unverified. It has now been confirmed in
+// a real session: dispatching a subagent with no task plan injected the
+// reminder text into the main thread. If a future Claude Code version regresses,
+// re-check the same way (no plan, dispatch any subagent, look for the reminder)
+// and fall back per the note at the bottom.
 //
-// To check, in a session with dev-agents loaded: with no task plan created,
-// dispatch any subagent. If the reminder text appears, it works. If it does not,
-// this hook is inert -- see the note at the bottom for the fallback.
+// Known small noise: several Agent calls issued in ONE message each run this
+// hook before any of them can bump the shared counter, so a parallel dispatch
+// can inject the same reminder more than once. Harmless, but a per-message
+// dedupe would be the fix if it starts to grate.
 // ============================================================================
 //
 // Two deviations from the bash original, both deliberate:

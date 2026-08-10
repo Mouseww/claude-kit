@@ -38,13 +38,15 @@ what is easy to get wrong.
 - `scripts/enable-in-project.mjs` writes forward slashes into `settings.json`
   even on Windows, so the file is portable across a team.
 - `require-task-plan.mjs` emits `additionalContext` under a **PreToolUse**
-  `hookSpecificOutput`. That field is documented for UserPromptSubmit and
-  PostToolUse, and whether this Claude Code version honours it on PreToolUse is
-  unverified — a silently ignored payload is indistinguishable from a working
-  hook. The header comment says how to check. Do not "fix" it by switching to
-  `permissionDecision: "deny"`; blocking a dispatch over a missing task list
-  trades a small context loss for a hard failure, and the hook cannot tell a
-  one-step delegation from a ten-step one.
+  `hookSpecificOutput`. That field is only documented for UserPromptSubmit and
+  PostToolUse, but it was verified working on PreToolUse in a real session on
+  2026-08-05 (the reminder text was injected on a planless dispatch). If a
+  Claude Code update ever regresses it, the header comment says how to re-check.
+  Do not "fix" it by switching to `permissionDecision: "deny"`; blocking a
+  dispatch over a missing task list trades a small context loss for a hard
+  failure, and the hook cannot tell a one-step delegation from a ten-step one.
+  Known small noise: parallel Agent calls in one message can inject the
+  reminder more than once.
 
 ## Where guidance goes: block vs skill
 
