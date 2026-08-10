@@ -1,7 +1,6 @@
 {
   "name": "claude-kit-meta",
-  "displayName": "claude-kit meta",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Install and manage claude-kit itself. Provides /claude-kit-meta:install-here to enable chosen plugins for the current project, /claude-kit-meta:list to see what is available, /claude-kit-meta:new-plugin to scaffold a new capability pack, and daily auto-update checking.",
   "keywords": ["meta", "installer", "scaffold", "marketplace", "auto-update"],
   "license": "MIT"

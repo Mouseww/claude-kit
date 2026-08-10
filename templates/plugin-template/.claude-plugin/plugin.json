@@ -1,6 +1,5 @@
 {
   "name": "REPLACE-ME",
-  "displayName": "Replace Me",
   "version": "0.1.0",
   "description": "One or two sentences saying what this pack does and when it is worth installing. This text is what a human reads in /plugin, so be concrete: name the problem it solves, not the technology it uses.",
   "keywords": ["replace", "me"],
