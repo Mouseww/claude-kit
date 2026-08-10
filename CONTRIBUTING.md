@@ -146,4 +146,4 @@ node scripts/validate.mjs
 node --test "plugins/**/tests/*.test.mjs" "tests/*.test.mjs"
 ```
 
-Both run in CI, on GitHub Actions and Bitbucket Pipelines.
+Both run in CI, on GitHub Actions.

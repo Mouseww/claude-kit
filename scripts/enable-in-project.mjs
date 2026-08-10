@@ -7,7 +7,7 @@
 //   node scripts/enable-in-project.mjs --project ../my-app --plugins dev-agents
 //   node scripts/enable-in-project.mjs --project . --plugins dev-agents --remove
 //   node scripts/enable-in-project.mjs --project . --plugins dev-agents \
-//        --source git --url ssh://git@bitbucket.org/team/claude-kit.git
+//        --source git --url https://github.com/Mouseww/claude-kit.git
 //
 // Why this exists. A plugin marketplace is a user-level thing: /plugin install
 // puts a plugin on YOUR machine, for every project. Making a plugin part of a

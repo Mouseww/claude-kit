@@ -1,9 +1,8 @@
 # claude-kit
 
-Four Claude Code plugins that keep a long session cheap: subagents with the model
-tier already bound per role, automatic truncation of verbose command output, a team
-process that parallel agents cannot corrupt, and a pack that manages this
-repository from inside Claude.
+Three Claude Code plugins that keep a long session cheap: subagents with the model
+tier already bound per role, automatic truncation of verbose command output, and a
+pack that manages this repository from inside Claude.
 
 Every hook and script is a single `.mjs`, so macOS, Linux and native Windows run
 identical code. `node` on `PATH` is the only requirement.
@@ -12,25 +11,23 @@ identical code. `node` on `PATH` is the only requirement.
 
 ## Install
 
-This repository is private, so `git` needs Bitbucket credentials before Claude
-Code can clone it. Check that first:
+Check that `git` can reach the repository before anything else:
 
 ```bash
-git clone --depth 1 https://bitbucket.org/rspcode/claude-kit.git claude-kit-check
+git clone --depth 1 https://github.com/Mouseww/claude-kit.git claude-kit-check
 ```
 
 If that works, delete the directory and carry on. If it fails on authentication,
-store a Bitbucket app password in your credential helper, or set git up to reach
-`bitbucket.org` over SSH. Claude Code clones with whatever credentials git already
-has and none of its own, so an auth problem surfaces here or nowhere.
+store a GitHub personal access token in your credential helper, or set git up to
+reach `github.com` over SSH. Claude Code clones with whatever credentials git
+already has and none of its own, so an auth problem surfaces here or nowhere.
 
 Then, in any Claude Code session:
 
 ```
-/plugin marketplace add https://bitbucket.org/rspcode/claude-kit.git
+/plugin marketplace add https://github.com/Mouseww/claude-kit.git
 /plugin install dev-agents@claude-kit
 /plugin install context-trim@claude-kit
-/plugin install fleet-engineering@claude-kit
 /plugin install claude-kit-meta@claude-kit
 ```
 
@@ -106,8 +103,7 @@ hand the migration to dev-agents:devops-engineer
 | `/claude-kit-meta:new-plugin <name> <desc>` | Scaffold a new pack and register it |
 
 **Skills** load when they are relevant, or you can ask for one by name: the
-`dev-agents` skill is the long reference on when delegating is a net loss, and
-`fleet-engineering` is the whole team methodology.
+`dev-agents` skill is the long reference on when delegating is a net loss.
 
 > **One caveat, measured 2026-07-30.** Whether delegation happens *on its own*
 > depends on which surface you are in. A terminal `claude` session dispatches
@@ -159,28 +155,6 @@ node plugins/context-trim/scripts/report-metrics.mjs
 The assumption that delegating beats reading inline might be wrong for your
 workload, and this is how you find out.
 
-### `fleet-engineering`
-
-Agent-first development for a team rather than one person. A solo harness quietly
-assumes a single writer: sequential file numbering, hand-edited index files,
-advisory "check for conflicts" steps. Two people working the same day break all of
-them. This pack removes the assumption instead of asking people to be careful:
-ticket-derived ids rather than counted files, indexes generated from frontmatter
-and checked in CI, and a **Claims** section that merges to main *before*
-implementation so overlap is caught early.
-
-The gate that does the most work is **Step E**: the agent that wrote the code is
-not allowed to sign it off. An independent `fleet-evaluator` subagent must return
-`PASS` before a code PR opens, and the main agent may never override a blocker.
-Human review still happens after that; the evaluator is the precondition, not a
-replacement.
-
-A user-level install is fully usable on its own. Three things need the repository
-before a *team* can rely on them: `docs_lint.py`, the CI workflow and CODEOWNERS
-only gate anything from inside CI, and pinning the skill and evaluator versions is
-what stops each teammate drifting onto their own copy. Those templates are Python,
-so a team adopting them needs Python 3 in CI.
-
 ### `claude-kit-meta`
 
 Wraps this repository's own scripts as the slash commands listed under Usage.
@@ -215,7 +189,7 @@ a resident block. Three things go wrong here, all of them quietly:
 **The push is not what makes your own copy update.** If you added the marketplace
 by path rather than by URL, its `source` in `known_marketplaces.json` is
 `directory` and points at your clone, so the local update reads this working copy
-and Bitbucket never enters into it. Push for everyone else, not for yourself.
+and GitHub never enters into it. Push for everyone else, not for yourself.
 
 **`@claude-kit` is not optional.** A bare `claude plugin update dev-agents` has to
 guess which pack you mean across every installed marketplace. On 2026-08-04 it
@@ -244,10 +218,10 @@ node scripts/enable-in-project.mjs --project /path/to/the/project --plugins dev-
 ```
 
 By default it registers *your* clone's path, which is wrong for anyone else on the
-team, so point it at Bitbucket instead:
+team, so point it at GitHub instead:
 
 ```bash
---source git --url https://bitbucket.org/rspcode/claude-kit.git
+--source git --url https://github.com/Mouseww/claude-kit.git
 ```
 
 Drop `--dry-run` to apply. It deep-merges into existing settings, never removes a
