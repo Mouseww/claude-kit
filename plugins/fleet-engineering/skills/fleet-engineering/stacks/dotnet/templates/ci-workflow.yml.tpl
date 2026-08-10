@@ -34,31 +34,73 @@ jobs:
 
       - name: Plan-reference gate (docs-first enforcement)
         if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BRANCH: ${{ github.head_ref }}
         run: |
-          BRANCH="${{ github.head_ref }}"
-          case "$BRANCH" in
-            feature/*)
-              TICKET=$(echo "$BRANCH" | sed -E 's#^feature/([A-Za-z]+-[0-9]+).*#\1#')
-              if ! ls docs/exec-plans/active/${TICKET}-*.md docs/exec-plans/completed/${TICKET}-*.md 2>/dev/null | grep -q .; then
-                echo "=========================================="
-                echo "PLAN-REFERENCE GATE FAILED"
-                echo "=========================================="
-                echo "Branch '$BRANCH' implements ticket '$TICKET' but no exec plan"
-                echo "named docs/exec-plans/active/${TICKET}-*.md exists on this branch."
-                echo ""
-                echo "Fleet engineering is docs-first: the spec/design/plan must merge"
-                echo "to main BEFORE implementation. How to fix:"
-                echo "  1. Create the plan from the execution-plan template"
-                echo "  2. Open a docs-only PR (branch docs/${TICKET}-...) and merge it"
-                echo "  3. Rebase this branch on main"
-                echo "If this is a user-waived urgent fix, add docs/tech-debt/TD-${TICKET}-docs-waiver.md"
-                echo "and rerun (the gate accepts a waiver entry)."
-                echo "=========================================="
-                ls docs/tech-debt/TD-${TICKET}-docs-waiver.md 2>/dev/null || exit 1
-              fi
-              ;;
-            *) echo "Branch '$BRANCH' is not an implementation branch; gate skipped." ;;
-          esac
+          set -e
+
+          fail() {
+            echo ""
+            echo "=========================================="
+            echo "PLAN-REFERENCE GATE FAILED"
+            echo "=========================================="
+            echo "$1"
+            echo ""
+            echo "How to fix, pick one:"
+            echo "  1. Add an exec plan on this branch: docs/exec-plans/active/{TICKET}-{slug}.md"
+            echo "  2. Add a waiver on this branch: docs/tech-debt/TD-{TICKET}-docs-waiver.md"
+            echo "  3. Light path only: put the five R2 signal values (S1-S5) in the PR"
+            echo "     description inside a fleet-signals block. CI checks the block exists"
+            echo "     and is well-formed; the evaluator checks the values are true."
+            echo "Docs and code ship in the same PR; there is no separate docs-only PR."
+            echo "Reference: .claude/skills/fleet-engineering/references/collaboration-controls.md"
+            echo "=========================================="
+            exit 1
+          }
+
+          # Gate fires on diff content, not branch name: any non-test, non-doc source
+          # file touched by this PR triggers it.
+          CHANGED_GATED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -viE '(^docs/|\.md$|test)' || true)
+          if [ -z "$CHANGED_GATED" ]; then
+            echo "No non-test, non-doc source files changed; gate does not apply."
+            exit 0
+          fi
+
+          # Light path: PR description carries the five R2 signals, all false.
+          SIGNALS=$(printf '%s\n' "$PR_BODY" | sed -n '/<!-- fleet-signals -->/,/<!-- \/fleet-signals -->/p')
+          if [ -n "$SIGNALS" ]; then
+            MISSING=0
+            for S in S1 S2 S3 S4 S5; do
+              echo "$SIGNALS" | grep -qE "^${S}:[[:space:]]*(true|false)$" || MISSING=1
+            done
+            if [ "$MISSING" -eq 0 ] && ! echo "$SIGNALS" | grep -qE '^(S1|S2|S3|S4|S5):[[:space:]]*true$'; then
+              echo "Light-path signals block present and well-formed (all S1-S5 false); gate satisfied."
+              exit 0
+            fi
+          fi
+
+          # Ticket resolution order: PR title -> PR description -> branch name -> commit messages.
+          TICKET=""
+          for SRC in "$PR_TITLE" "$PR_BODY" "$BRANCH"; do
+            T=$(printf '%s' "$SRC" | grep -oE '[A-Za-z]+-[0-9]+' | head -1 || true)
+            if [ -n "$T" ]; then TICKET="$T"; break; fi
+          done
+          if [ -z "$TICKET" ]; then
+            TICKET=$(git log "$BASE_SHA..$HEAD_SHA" --format='%s%n%b' | grep -oE '[A-Za-z]+-[0-9]+' | head -1 || true)
+          fi
+          if [ -z "$TICKET" ]; then
+            fail "No ticket ID (PATTERN-123) found in the PR title, PR description, branch name, or commit messages."
+          fi
+
+          # Exec plan (any status) reachable on this branch, or a docs waiver, satisfies the gate.
+          if ls docs/exec-plans/active/${TICKET}-*.md docs/exec-plans/completed/${TICKET}-*.md docs/tech-debt/TD-${TICKET}-docs-waiver.md 2>/dev/null | grep -q .; then
+            exit 0
+          fi
+          fail "Branch implements ticket '$TICKET' but no exec plan docs/exec-plans/{active,completed}/${TICKET}-*.md and no waiver docs/tech-debt/TD-${TICKET}-docs-waiver.md exist on this branch."
 
   build-and-test:
     runs-on: ubuntu-latest

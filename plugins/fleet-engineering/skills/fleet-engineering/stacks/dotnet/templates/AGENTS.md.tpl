@@ -10,7 +10,7 @@
 **{{ProjectName}}** - <!-- INSTRUCTION: One-line project description -->
 - **Tech Stack**: .NET 8 / C#
 - **Architecture**: Layered Domain Architecture with strict dependency rules
-- **Team process**: fleet engineering (docs-first PRs, claims, generated indexes, mandatory audit)
+- **Team process**: fleet engineering (docs written first on the implementation branch, claims, generated indexes, mandatory audit)
 
 ## Quick Navigation
 
@@ -33,7 +33,7 @@
 3. **Code format**: `dotnet format --verify-no-changes` before submitting
 4. **Domain purity**: `{{ProjectName}}.Domain` has ZERO external NuGet dependencies
 5. **Docs lint**: `python tools/docs_lint.py --check` must pass; run `--fix` after editing any doc
-6. **Docs-first**: implementation starts only after the spec/design/plan merged to main (status Approved/Active)
+6. **Docs first, same branch**: spec/design/plan are authored and committed on the implementation branch before the first implementation commit (status In Review); implementation MUST NOT start while a required doc is still Draft
 7. **Claims**: stay inside your exec plan's claims; amend the Claims section before touching new paths
 8. **Audit**: every development request ends with a `fleet-evaluator` PASS before the code PR opens
 
@@ -41,7 +41,7 @@
 
 - Do NOT hand-edit GENERATED files (any `docs/**/index.md`, `docs/QUALITY_SCORE.md`); a hook blocks this; run `python tools/docs_lint.py --fix`
 - Do NOT invent sequential doc numbers; use ticket IDs (`PIEX-1234-slug.md`)
-- Do NOT start implementation against a Draft/In Review spec or plan
+- Do NOT start implementation against a Draft spec or plan; `In Review` is the working state for the implementation phase and is not a blocker
 - Do NOT modify `AGENTS.md`, CODEOWNERS, `.claude/`, or `tools/docs_lint.py` without team-lead approval (CODEOWNERS enforces)
 - Do NOT edit another plan's Claims section to unblock yourself; negotiate with its owner
 - Do NOT bypass architecture tests, add NuGet packages to Domain, use unstructured logging, or commit secrets
@@ -63,14 +63,14 @@
 ## Naming Conventions
 
 - Interfaces `I*`; async methods `*Async`; test classes `*Tests`; tests `MethodName_Scenario_ExpectedResult`
-- Branches: `docs/{TICKET}-{slug}` (docs-first PRs), `feature/{TICKET}-{slug}` (implementation)
+- Branches: one branch per change, `feature/{TICKET}-{slug}` (or `fix/{TICKET}-{slug}` for bug fixes); docs and code both live on this branch, there is no separate docs branch
 - Commits: `feat({TICKET}): ...` conventional style
 
 ## How to Work in This Repo
 
 1. **Read the map first**: this file, then follow links
-2. **Pre-flight**: `git fetch`; read `docs/exec-plans/active/` ON MAIN; check claim overlaps (`python tools/docs_lint.py --check`)
-3. **Docs first**: spec/design/plan -> docs PR -> merge -> then code
+2. **Pre-flight**: `git fetch --all --prune`; read `docs/exec-plans/active/*.md` from `origin/*` branches and open PRs (not main); check claim overlaps
+3. **Docs first, same branch**: spec/design/plan committed on the implementation branch, status In Review, before the first implementation commit -> then code, same branch
 4. **Run locally before submitting**:
    ```bash
    dotnet format && dotnet build --warnaserror && dotnet test
@@ -83,8 +83,8 @@
 Follow `.claude/skills/fleet-engineering/SKILL.md` "Development Request Procedure". Summary:
 
 1. Classify: feature | enhancement | bug fix | refactor | config
-2. Pre-flight claims check against active plans on main
-3. Spec/design/plan via docs-first PR (templates in `.claude/skills/fleet-engineering/templates/`)
+2. Pre-flight claims check against active plans on remote branches and open PRs (Step 0)
+3. Spec/design/plan committed on the same branch before implementation starts (templates in `.claude/skills/fleet-engineering/templates/`)
 4. Implement phase by phase inside claims; format/build/test after each phase
 5. Step E: bookkeeping, `docs_lint.py --fix`, then `fleet-evaluator` audit loop to PASS
 6. Code PR with ticket + plan link + evaluator summary

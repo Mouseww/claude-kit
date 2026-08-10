@@ -13,8 +13,10 @@ relates: []
 
 > <!-- INSTRUCTION: One-sentence summary of what this feature does and who it serves. -->
 
-<!-- INSTRUCTION: Lifecycle: Draft -> In Review (docs PR) -> Approved (merged to main).
-     Implementation must not start against a Draft or In Review spec. -->
+<!-- INSTRUCTION: Lifecycle: Draft -> In Review (committed to the implementation branch,
+     complete) -> Approved (set by the human PR reviewer or by merge automation, never by
+     the agent). Implementation must not start against a Draft spec. `In Review` is the
+     normal working state during implementation, since docs and code ship in one PR. -->
 
 ## Glossary
 

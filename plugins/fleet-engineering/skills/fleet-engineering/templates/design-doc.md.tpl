@@ -14,9 +14,13 @@ relates:
 
 > <!-- INSTRUCTION: One-sentence summary of what this design covers. -->
 
-<!-- INSTRUCTION: Lifecycle: Draft -> In Review (docs PR) -> Approved -> Superseded/Archived.
-     Changes to an Approved design doc go through a docs PR reviewed by the doc owner
-     (CODEOWNERS routes this automatically). -->
+<!-- INSTRUCTION: Lifecycle: Draft -> In Review (committed to the implementation branch,
+     complete) -> Approved (set by the human PR reviewer or by merge automation, never by
+     the agent) -> Superseded/Archived. Implementation must not start against a Draft design.
+     `In Review` is the normal working state during implementation.
+     If implementation shows this design is wrong, do not silently rewrite it: append a
+     Design Change entry and reset status to In Review (see references/development-workflow.md).
+     CODEOWNERS routes the doc portion of the PR to the doc owner automatically. -->
 
 ## 1. Problem Statement
 

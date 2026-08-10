@@ -22,11 +22,16 @@ claims:
 > <!-- INSTRUCTION: One-sentence goal of this execution plan. -->
 
 <!-- INSTRUCTION: Lifecycle reminder.
-     Draft -> In Review (docs-first PR open) -> Active (merged to main; claims are now live locks)
+     Draft (being written, implementation MUST NOT start)
+     -> In Review (committed to this branch, complete; implementation may proceed, this is the
+        working state during implementation)
+     -> Active (PR approved by the human reviewer, or set by merge automation; claims are now
+        live locks; not something the agent sets on itself)
      -> Completed (all phases done + audit passed; move file to docs/exec-plans/completed/).
-     Implementation MUST NOT start before status is Active.
+     Docs and code ship in the same PR; there is no separate docs-only PR to main.
      Before authoring: run `python tools/docs_lint.py --check` and resolve any claim overlap
-     with other active plans (see references/collaboration-controls.md). -->
+     against plans discovered on remote branches and open PRs, not main
+     (see references/collaboration-controls.md). -->
 
 ## Overview
 

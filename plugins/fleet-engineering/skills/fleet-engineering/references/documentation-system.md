@@ -67,9 +67,9 @@ Draft -> In Review -> Approved (spec/design) / Active (plan) -> Completed (plan)
                                               \-> Superseded / Archived
 ```
 
-- **Draft**: being written; implementation MUST NOT start against it
-- **In Review**: docs-first PR open
-- **Approved / Active**: merged to main and in effect; agents follow it; a plan's claims now lock
+- **Draft**: being written, or not yet committed to the branch; implementation MUST NOT start against it
+- **In Review**: doc complete and committed to the same branch that carries the implementation; PR not yet approved; implementation may proceed
+- **Approved / Active**: PR approved by the human reviewer, or set by merge automation; agents follow it; a plan's claims now lock
 - **Completed**: plan finished and audited; claims released
 - **Superseded**: replaced (must link successor); **Archived**: kept for history only
 
@@ -91,20 +91,26 @@ Statuses are gates enforced by the docs linter and the evaluator, not just label
 Product Spec (WHAT)
     -> Design Doc (HOW)
     -> Execution Plan (WHEN + claims)
-    -> DOCS-FIRST PR to main (team visibility + approval)
-    -> Implementation (inside claims)
+    -> Docs committed on the implementation branch, status In Review
+    -> Implementation (inside claims, same branch)
     -> Quality Audit (fleet-evaluator PASS)
-    -> Code PR (human review)
+    -> ONE PR (docs + code, human review)
 ```
 
 Acceptance criteria from the spec become verification steps in the plan. Domain models from the design doc become entities in code. Claims from the plan become the team's conflict radar.
 
-## "Main Is Source of Truth" Principle
+## "The Repo Is Source of Truth" Principle
 
-The solo rule was "repo is source of truth." The team rule is sharper: **only the main branch is shared truth.**
+The solo rule was "repo is source of truth." The team rule keeps that but widens where truth is
+read from: **main is the merged record; remote branches and open PRs are where in-flight work is
+visible before it merges.** `main` is branch-protected, so nothing lands there without a PR, and
+a separate docs-only PR to make a plan visible early is not worth its own review cycle (see
+`collaboration-controls.md` Control 1).
 
-- Decisions made in Slack or meetings must be encoded in `docs/` ON MAIN
-- A spec or plan sitting on a feature branch is invisible to the team; merge docs first
+- Decisions made in Slack or meetings must be encoded in `docs/`, committed on the branch that
+  will carry the implementation
+- Conflict detection (Step 0) reads active plans from `origin/*` branches and open PRs, not from
+  main; a plan is visible to the team as soon as it is pushed, not once it merges
 - API contracts live in product specs, not external wikis
 - Architecture rules live in ARCHITECTURE.md, enforced by tests
 - The development process itself lives in `.claude/` in the repo, so every teammate and every agent runs the same version

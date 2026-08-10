@@ -83,7 +83,7 @@ Exit code 0 = clean (warnings allowed for staleness/overlap if configured); non-
 The stack CI template (`stacks/{stack}/templates/ci-workflow.yml.tpl`) adds two jobs beyond build/test/format:
 
 1. **docs-lint**: `python tools/docs_lint.py --check` on every PR.
-2. **plan-reference gate**: for branches matching `feature/{TICKET}-*`, verify `docs/exec-plans/active/{TICKET}-*.md` exists on the target branch (i.e., the docs-first PR merged before this implementation PR). Docs-only branches (`docs/*`) and fix branches are exempt by pattern. Failure message explains the docs-first rule and how to comply.
+2. **plan-reference gate**: fires on diff content, not branch name. If the PR diff touches any non-test, non-doc source file, the gate applies. Ticket resolution order: PR title -> PR description -> branch name -> commit messages. The gate is satisfied by an exec plan for that ticket (any status, `active/` or `completed/`) reachable on the PR branch, or a `docs/tech-debt/TD-{TICKET}-docs-waiver.md` entry in the same PR, or (light path) a PR description carrying a well-formed `fleet-signals` block with the five R2 signal values, all false. CI validates the signals block exists and is well-formed; the evaluator validates that it is true. Docs and code ship in the same PR; there is no separate docs-only PR to satisfy.
 
 ## Scheduled Sweeps (Layer 3 garbage collection)
 
