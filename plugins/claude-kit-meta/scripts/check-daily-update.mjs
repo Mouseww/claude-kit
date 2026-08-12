@@ -7,6 +7,8 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statSy
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { appendFileSync } from 'node:fs';
+import { resolveMarketplaceSource, computeDirectoryFingerprint } from './marketplace-source.mjs';
+import { pickExecutable, needsShell } from './resolve-command.mjs';
 
 const MARKETPLACE_NAME = 'claude-kit';
 const TIMEOUT_MS = 10_000;
@@ -74,34 +76,21 @@ function resolveCmd(name) {
   if (!IS_WINDOWS) return name;
   try {
     const out = execFileSync('where', [name], { timeout: 5000, encoding: 'utf8', stdio: 'pipe' });
-    const first = out.split(/\r?\n/).find(l => l.trim());
-    return first?.trim() || name;
+    return pickExecutable(out) || name;
   } catch {
     return name;
   }
 }
 
-function resolveMarketplaceUrl() {
+function readKnownMarketplaces() {
   const known = join(PLUGINS_DIR, 'known_marketplaces.json');
   if (!existsSync(known)) return null;
   try {
-    const data = JSON.parse(readFileSync(known, 'utf8'));
-    for (const entry of Object.values(data)) {
-      if (entry.name === MARKETPLACE_NAME || entry.repo?.endsWith(MARKETPLACE_NAME)) {
-        if (entry.source === 'github') return `https://github.com/${entry.repo}.git`;
-        if (entry.source === 'directory') return entry.path;
-        if (entry.url) return entry.url;
-      }
-    }
-    for (const [key, entry] of Object.entries(data)) {
-      if (key.includes(MARKETPLACE_NAME) || key.endsWith(MARKETPLACE_NAME)) {
-        if (entry.source === 'github') return `https://github.com/${entry.repo}.git`;
-        if (entry.source === 'directory') return entry.path;
-        if (entry.url) return entry.url;
-      }
-    }
-  } catch (e) { log(`resolveMarketplaceUrl failed: ${e.message}`); }
-  return null;
+    return JSON.parse(readFileSync(known, 'utf8'));
+  } catch (e) {
+    log(`readKnownMarketplaces failed: ${e.message}`);
+    return null;
+  }
 }
 
 function getRemoteHead(url) {
@@ -114,6 +103,15 @@ function getRemoteHead(url) {
     log(`git ls-remote failed: ${e.message}`);
     return null;
   }
+}
+
+// Fingerprints a marketplace source regardless of whether it is a git
+// remote or a local directory checkout.
+function fingerprintSource(src) {
+  if (!src) return null;
+  if (src.kind === 'git') return getRemoteHead(src.url);
+  if (src.kind === 'directory') return computeDirectoryFingerprint(src.path);
+  return null;
 }
 
 function getInstalledPlugins() {
@@ -156,10 +154,19 @@ function findSyncScript(pluginName) {
   return null;
 }
 
+// When resolved needs a shell (.cmd/.bat), every arg passed through here is
+// either a literal defined in this file or a plugin name that has already
+// been whitelisted against /^[a-zA-Z0-9_-]+$/ in getInstalledPlugins(), so
+// there is no shell-injection surface from user-controlled input.
 function run(cmd, args) {
   const resolved = resolveCmd(cmd);
   try {
-    execFileSync(resolved, args, { timeout: TIMEOUT_MS, encoding: 'utf8', stdio: 'pipe' });
+    if (needsShell(resolved)) {
+      const quotedArgs = args.map(a => `"${a}"`);
+      execFileSync(`"${resolved}"`, quotedArgs, { timeout: TIMEOUT_MS, encoding: 'utf8', stdio: 'pipe', shell: true });
+    } else {
+      execFileSync(resolved, args, { timeout: TIMEOUT_MS, encoding: 'utf8', stdio: 'pipe' });
+    }
     return true;
   } catch (e) {
     log(`run(${cmd}, ${JSON.stringify(args)}) failed: ${e.message}`);
@@ -167,13 +174,13 @@ function run(cmd, args) {
   }
 }
 
-function spawnUpdate(flag, todayStr, remoteHead, url) {
+function spawnUpdate(flag, todayStr, fingerprint) {
   const child = spawn(process.execPath, [import.meta.filename, '--do-update'], {
     detached: true,
     stdio: 'ignore',
     env: {
       ...process.env,
-      _CLAUDE_KIT_UPDATE_REMOTE_HEAD: remoteHead,
+      _CLAUDE_KIT_UPDATE_FINGERPRINT: fingerprint,
       _CLAUDE_KIT_UPDATE_TODAY: todayStr,
     },
   });
@@ -182,7 +189,7 @@ function spawnUpdate(flag, todayStr, remoteHead, url) {
 
 async function doUpdate() {
   const todayStr = process.env._CLAUDE_KIT_UPDATE_TODAY;
-  const remoteHead = process.env._CLAUDE_KIT_UPDATE_REMOTE_HEAD;
+  const fingerprint = process.env._CLAUDE_KIT_UPDATE_FINGERPRINT;
 
   const claudeCmd = resolveCmd('claude');
   const marketplaceOk = run(claudeCmd, ['plugin', 'marketplace', 'update', MARKETPLACE_NAME]);
@@ -212,7 +219,10 @@ async function doUpdate() {
     }
   }
 
-  writeFlag({ lastCheck: todayStr, lastCommit: remoteHead });
+  // lastCommit now holds a git SHA or a directory fingerprint depending on
+  // the marketplace source kind; the field name is kept as-is so existing
+  // ~/.claude/claude-kit-update-check.json files stay valid.
+  writeFlag({ lastCheck: todayStr, lastCommit: fingerprint });
   log(`update complete. updated=[${updated}] failed=[${failed}]`);
   releaseLock();
 }
@@ -233,27 +243,29 @@ async function main() {
 
   if (!acquireLock()) return;
 
-  const url = resolveMarketplaceUrl();
-  if (!url) {
+  const knownMarketplaces = readKnownMarketplaces();
+  const src = resolveMarketplaceSource(knownMarketplaces, MARKETPLACE_NAME);
+  if (!src) {
     writeFlag({ ...flag, lastCheck: todayStr });
     releaseLock();
     return;
   }
 
-  const remoteHead = getRemoteHead(url);
-  if (!remoteHead) {
+  const fingerprint = fingerprintSource(src);
+  if (!fingerprint) {
     writeFlag({ ...flag, lastCheck: todayStr });
     releaseLock();
     return;
   }
 
-  if (remoteHead === flag.lastCommit) {
+  // lastCommit holds either a git SHA or a directory fingerprint, see doUpdate().
+  if (fingerprint === flag.lastCommit) {
     writeFlag({ ...flag, lastCheck: todayStr });
     releaseLock();
     return;
   }
 
-  spawnUpdate(flag, todayStr, remoteHead, url);
+  spawnUpdate(flag, todayStr, fingerprint);
   output('claude-kit: checking for plugin updates in the background.');
 }
 

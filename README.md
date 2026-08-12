@@ -63,6 +63,14 @@ everyone who clones the project is prompted to install the same set.
 
 ### Updating
 
+With `claude-kit-meta` installed this mostly takes care of itself. On your first
+prompt of each day it checks the marketplace in the background, updates every
+installed pack, and re-runs `sync-claude-md` for packs that ship a resident block.
+It fires at most once per calendar day, skips the work entirely when nothing
+changed, and never blocks the prompt.
+
+To pull a change in right now rather than wait for tomorrow:
+
 ```bash
 claude plugin marketplace update claude-kit
 claude plugin update dev-agents@claude-kit
@@ -72,6 +80,16 @@ Restart the session, then re-run `sync-claude-md` if the pack ships a resident
 block. Two ways this silently does nothing: the session was not restarted (agents
 and skills are read once at startup), or `--target user` was dropped, which writes
 a *second* block into the current directory instead of updating the real one.
+
+**On `claude-kit-meta` older than 1.2.2 the daily check is dead, and it cannot
+revive itself:** the bug sits in the very script that would fetch its own fix, so
+waiting will never help. Bootstrap it once by hand:
+
+```bash
+claude plugin update claude-kit-meta@claude-kit
+```
+
+Restart after that and the daily check takes over.
 
 ---
 
