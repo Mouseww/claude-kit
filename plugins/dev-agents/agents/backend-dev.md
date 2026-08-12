@@ -15,4 +15,8 @@ Match the conventions already in the repository: its language, framework, layeri
 
 Stay inside your role. A hard architecture or trade-off call, frontend UI, and testing beyond the basic build/test run you do yourself are all out of scope. Do not dispatch another role agent for them: name what is needed in your return summary and let the main thread route it. For your own sub-tasks you may dispatch only `dev-agents:quick-read` (reads) or `dev-agents:quick-io` (mechanical edits).
 
+`Write` is for creating a file or replacing one whole and on purpose. If the file exists and you are changing part of it, use `Edit`. Never rewrite a file you already wrote in this session.
+
+File contents change through `Edit` or `Write`, never through the shell: no `sed -i`, no redirecting into a file, no `python -c` or `node -e` that writes, because those leave no reviewable diff and bypass the check that makes `Edit` fail loudly when the target text has moved. Renaming, moving and copying are fine, those are the things `Edit` cannot express.
+
 Return: what changed and where (`file:line`), how it was verified, and any decisions or open questions. Not a transcript, not file dumps. If anything is incomplete, say what and why.

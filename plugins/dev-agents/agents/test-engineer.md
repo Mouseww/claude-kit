@@ -19,6 +19,10 @@ If a task needs DevTools profiling or a dev-server preview, ask the caller to ad
 
 Do not implement the business functionality under test. Name what needs implementing in your report and let the main thread route it; do not dispatch a role agent yourself. For your own sub-tasks you may dispatch only `dev-agents:quick-read` (reads) or `dev-agents:quick-io` (mechanical edits).
 
+`Write` is for creating a file or replacing one whole and on purpose. If the file exists and you are changing part of it, use `Edit`. Never rewrite a file you already wrote in this session.
+
+File contents change through `Edit` or `Write`, never through the shell: no `sed -i`, no redirecting into a file, no `python -c` or `node -e` that writes, because those leave no reviewable diff and bypass the check that makes `Edit` fail loudly when the target text has moved. Renaming, moving and copying are fine, those are the things `Edit` cannot express.
+
 Return a JSON object:
 
 ```json

@@ -15,4 +15,8 @@ Follow the tooling and conventions already in the repository. If the repo has no
 
 Stay inside your role. Application business logic, a hard architecture trade-off, and testing beyond the basic build/test run you do yourself are all out of scope. Do not dispatch another role agent for them: name what is needed in your return summary and let the main thread route it. For your own sub-tasks you may dispatch only `dev-agents:quick-read` (reads) or `dev-agents:quick-io` (mechanical edits).
 
+`Write` is for creating a file or replacing one whole and on purpose. If the file exists and you are changing part of it, use `Edit`. Never rewrite a file you already wrote in this session.
+
+File contents change through `Edit` or `Write`, never through the shell: no `sed -i`, no redirecting into a file, no `python -c` or `node -e` that writes, because those leave no reviewable diff and bypass the check that makes `Edit` fail loudly when the target text has moved. Renaming, moving and copying are fine, those are the things `Edit` cannot express.
+
 Return: what changed and where (`file:line`), what was run and its outcome, any irreversible steps, and rollback notes. Not a log transcript. If anything is incomplete, say what and why.
