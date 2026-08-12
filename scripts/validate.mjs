@@ -37,6 +37,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { hasAgentTool, readSkillsList, bodyLinesAfterFrontmatter, findDispatchViolations } from './agent-nesting-rules.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -232,6 +233,33 @@ for (const entry of marketplace.plugins) {
       err(agent, `frontmatter name "${fm.name}" does not match the filename`);
     }
     if (!fm.description) err(agent, 'frontmatter missing "description"');
+
+    // An agent granted the Agent tool can spawn nested subagents. The
+    // nesting-discipline skill is what restricts those nested calls to
+    // quick-read/quick-io; an Agent-tool agent without it has no guardrail
+    // against nesting a full role agent, which blocks the parent for the
+    // nested child's entire duration.
+    if (hasAgentTool(fm.tools)) {
+      const text = fs.readFileSync(agent, 'utf8');
+      const skills = readSkillsList(text);
+      if (!skills.includes('nesting-discipline')) {
+        err(agent, 'is granted the Agent tool but does not carry the nesting-discipline skill');
+      }
+
+      // The body is always resident in the agent's prompt; a skill is only
+      // conditionally loaded. When the two disagree the body wins silently,
+      // so a body line telling the agent to dispatch another role agent is
+      // a real contradiction even with the skill present. Frontmatter is
+      // never scanned here: `description:` legitimately names other agents
+      // as caller-facing guidance.
+      const { startLine, lines } = bodyLinesAfterFrontmatter(text);
+      for (const v of findDispatchViolations(lines, startLine)) {
+        err(
+          agent,
+          `line ${v.line}: dispatches \`dev-agents:${v.target}\` via "${v.verb}"; only dev-agents:quick-read or dev-agents:quick-io may be dispatched from a role agent`
+        );
+      }
+    }
   }
 
   // ---- commands -------------------------------------------------------------
