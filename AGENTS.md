@@ -47,6 +47,13 @@ what is easy to get wrong.
   failure, and the hook cannot tell a one-step delegation from a ten-step one.
   Known small noise: parallel Agent calls in one message can inject the
   reminder more than once.
+- `skills:` in an agent's frontmatter injects the **full** skill body into that
+  agent's context at startup and does not require `Skill` in `tools:`. Verified
+  against the Claude Code subagent documentation on 2026-08-12. `validate.mjs`
+  relies on this when it requires an `Agent`-granting agent to carry
+  `nesting-discipline`, so do not delete that check as unfounded. An explicit
+  `tools:` list is an allowlist, so omitting `Skill` only stops the agent
+  loading *other* skills at run time; the preloaded ones are already present.
 
 ## Where guidance goes: block vs skill
 

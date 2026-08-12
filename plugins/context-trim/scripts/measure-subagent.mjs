@@ -135,9 +135,20 @@ async function main() {
     if (started && /^\d+$/.test(started)) duration = now - Number(started);
     quiet(() => fs.unlinkSync(startFile));
 
+    // A real log showed 269 of 649 "stop" events arriving with no
+    // agent_type, no preceding SubagentStart, returned_chars in the teens to
+    // low thirties, and an effort level that reads like the MAIN thread's
+    // own setting rather than a dispatched subagent's. Those are not
+    // subagent completions -- what actually fires them has not been
+    // established. That is exactly why this tags the record instead of
+    // dropping it: report-metrics.mjs can exclude it by name rather than by
+    // guessing at agent === 'unknown', and if the real source ever gets
+    // found, the tag is what will make it findable in the log.
+    const unattributed = !input.agent_type && duration == null;
+
     log({
       ts,
-      event: 'stop',
+      event: unattributed ? 'stop_unattributed' : 'stop',
       agent,
       agent_id: key,
       session,
