@@ -49,6 +49,33 @@ function output(text) {
   process.stdout.write(JSON.stringify({ additionalContext: text }));
 }
 
+function readStdin() {
+  return new Promise((resolve) => {
+    let buf = '';
+    let timer = null;
+    const IDLE_MS = 5000;
+    const resetTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => resolve(buf), IDLE_MS);
+      timer.unref();
+    };
+    process.stdin.setEncoding('utf8');
+    resetTimer();
+    process.stdin.on('data', (c) => {
+      buf += c;
+      resetTimer();
+    });
+    process.stdin.on('end', () => {
+      if (timer) clearTimeout(timer);
+      resolve(buf);
+    });
+    process.stdin.on('error', () => {
+      if (timer) clearTimeout(timer);
+      resolve(buf);
+    });
+  });
+}
+
 function acquireLock() {
   try {
     const fd = openSync(LOCK_FILE, 'wx');
@@ -233,8 +260,7 @@ async function main() {
     return;
   }
 
-  let stdinData = '';
-  for await (const chunk of process.stdin) stdinData += chunk;
+  await readStdin();
 
   const flag = readFlag();
   const todayStr = today();
