@@ -16,6 +16,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -23,11 +25,59 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(HERE, '..', 'scripts', 'truncate-verbose-output.mjs');
 const MIN_SAVING_PCT = 20;
 
+// The hook writes telemetry to CONTEXT_TRIM_METRICS_FILE, falling back to the
+// user's real ~/.claude/context-offload-metrics.jsonl if that env var is
+// unset. Setting a process-wide default here means every spawnSync call in
+// this file -- not just the telemetry-specific tests below -- writes to a
+// scratch file instead of polluting the user's real metrics log. Individual
+// tests can still override it via the `env` param to inspect what got
+// written for a specific case.
+const DEFAULT_METRICS_FILE = path.join(os.tmpdir(), `context-trim-test-metrics-default-${process.pid}.jsonl`);
+process.env.CONTEXT_TRIM_METRICS_FILE = DEFAULT_METRICS_FILE;
+process.on('exit', () => {
+  try {
+    fs.unlinkSync(DEFAULT_METRICS_FILE);
+  } catch {
+    // already absent, nothing to clean up
+  }
+});
+
+/**
+ * Points CONTEXT_TRIM_METRICS_FILE at a fresh per-call scratch file so a test
+ * can inspect exactly what got logged, without touching the shared default
+ * file above or the user's real metrics log. Removed afterwards.
+ */
+function withMetricsFile(fn) {
+  const file = path.join(os.tmpdir(), `context-trim-test-metrics-${process.pid}-${Math.random().toString(36).slice(2)}.jsonl`);
+  try {
+    return fn(file);
+  } finally {
+    try {
+      fs.unlinkSync(file);
+    } catch {
+      // already absent, nothing to clean up
+    }
+  }
+}
+
+function readTelemetry(file) {
+  try {
+    const text = fs.readFileSync(file, 'utf8');
+    return text
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
+  } catch {
+    return [];
+  }
+}
+
 /** Run the hook and return the raw updatedToolOutput, or null on passthrough. */
-function raw(payload) {
+function raw(payload, env = {}) {
   const p = spawnSync(process.execPath, [SCRIPT], {
     input: JSON.stringify(payload),
     encoding: 'utf8',
+    env: { ...process.env, ...env },
   });
   const out = (p.stdout || '').trim();
   if (!out) return null;
@@ -48,9 +98,10 @@ function run(payload) {
   return d;
 }
 
-const payload = (body, tool = 'Bash') => ({
+const payload = (body, tool = 'Bash', command) => ({
   tool_name: tool,
   session_id: 't',
+  ...(command !== undefined ? { tool_input: { command } } : {}),
   tool_response: { stdout: body, stderr: '', interrupted: false, isImage: false },
 });
 
@@ -204,8 +255,162 @@ test('non-shell tool name passes through (guard, not just the matcher)', () => {
   );
 });
 
+// ---- followup suggestion classification ------------------------------------
+// The hook is the one place that knows for certain content was just lost, so
+// once it has already decided to truncate, it appends an actionable followup
+// for commands that were clearly aimed at retrieving content. Everything else
+// (plain build/test/install commands) must be byte-identical to before.
+
+test('read-file command suggests the Read tool', () => {
+  const out = run(payload(lines(400, 20), 'Bash', 'cat build.log'));
+  assert.match(out, /use the Read tool instead/);
+});
+
+test('search command suggests the Grep tool', () => {
+  const out = run(payload(lines(400, 20), 'Bash', 'grep -r TODO src/'));
+  assert.match(out, /use the Grep tool instead/);
+});
+
+test('recursive list command suggests the Glob tool', () => {
+  const out = run(payload(lines(400, 20), 'Bash', 'ls -R src/'));
+  assert.match(out, /use the Glob tool instead/);
+});
+
+test('web fetch command suggests the WebFetch tool', () => {
+  const out = run(payload(lines(400, 20), 'Bash', 'curl https://example.com/api'));
+  assert.match(out, /use the WebFetch tool instead/);
+});
+
+test('git show suggests narrowing at the source, not a tool swap', () => {
+  const out = run(payload(lines(400, 20), 'Bash', 'git show HEAD'));
+  assert.match(out, /Rerun narrower next time/);
+  assert.match(out, /--stat|--name-only|-- <path>|-n <num>/);
+  assert.doesNotMatch(out, /instead/);
+});
+
+test('kubectl logs suggests narrowing at the source, not a tool swap', () => {
+  const out = run(payload(lines(400, 20), 'Bash', 'kubectl logs my-pod'));
+  assert.match(out, /Rerun narrower next time/);
+  assert.match(out, /--tail=N|-n N|LIMIT|jq filter/);
+  assert.doesNotMatch(out, /instead/);
+});
+
+test('ordinary build command gets no suggestion, notice unchanged', () => {
+  const withCommand = run(payload(lines(400, 20), 'Bash', 'npm run build'));
+  const withoutCommand = run(payload(lines(400, 20)));
+  assert.equal(withCommand, withoutCommand);
+  assert.doesNotMatch(withCommand, /Read tool|Grep tool|Glob tool|WebFetch tool|Rerun narrower/);
+});
+
+test('small output with a retrieval-looking command still passes through untouched', () => {
+  assert.equal(run(payload(CASES['10 short output, no trigger'], 'Bash', 'cat small.log')), null);
+});
+
 test('unparseable stdin passes through', () => {
   const p = spawnSync(process.execPath, [SCRIPT], { input: 'not json', encoding: 'utf8' });
   assert.equal((p.stdout || '').trim(), '');
   assert.equal(p.status, 0);
+});
+
+// ---- quantified omission markers -------------------------------------------
+// Every ellipsis marker in the emitted body must carry a line/char count, so
+// the model reading the notice can judge whether the loss is worth a rerun.
+
+test('error mode: budget cut on matching lines reports a line/char count', () => {
+  // 20 long "error" lines blow well past ERR_BUDGET (3000 chars), forcing the
+  // matching-line loop to break early.
+  const out = run(payload(CASES['17 20 error lines x 400']));
+  assert.match(out, /looks like a failure/);
+  assert.match(out, /\.\.\.\[\d+ lines \/ \d+ chars omitted\]\.\.\./);
+  assert.doesNotMatch(out, /more matching lines omitted/);
+});
+
+test('clean mode marker is unchanged (regression)', () => {
+  const out = run(payload(lines(300, 300)));
+  assert.match(out, /\.\.\.\[\d+ lines \/ \d+ chars omitted\]\.\.\./);
+});
+
+// ---- telemetry ---------------------------------------------------------
+
+test('telemetry: passthrough path is logged for small output', () => {
+  withMetricsFile((metricsFile) => {
+    const before = readTelemetry(metricsFile).length;
+    const out = raw(payload(CASES['10 short output, no trigger']), { CONTEXT_TRIM_METRICS_FILE: metricsFile });
+    assert.equal(out, null);
+    const entries = readTelemetry(metricsFile).slice(before);
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].event, 'truncate');
+    assert.equal(entries[0].path, 'passthrough');
+    assert.equal(entries[0].orig_chars, entries[0].final_chars);
+    assert.equal(entries[0].err_cut, false);
+    assert.equal(entries[0].tool, 'Bash');
+  });
+});
+
+test('telemetry: clean path is logged with a real saving', () => {
+  withMetricsFile((metricsFile) => {
+    raw(payload(lines(300, 300)), { CONTEXT_TRIM_METRICS_FILE: metricsFile });
+    const entries = readTelemetry(metricsFile);
+    const entry = entries[entries.length - 1];
+    assert.equal(entry.path, 'clean');
+    assert.equal(entry.err_cut, false);
+    assert.ok(entry.final_chars < entry.orig_chars);
+  });
+});
+
+test('telemetry: char path is logged for the single-long-line fallback', () => {
+  withMetricsFile((metricsFile) => {
+    raw(payload(CASES['1  single 40k-char line']), { CONTEXT_TRIM_METRICS_FILE: metricsFile });
+    const entries = readTelemetry(metricsFile);
+    const entry = entries[entries.length - 1];
+    assert.equal(entry.path, 'char');
+  });
+});
+
+test('telemetry: error path with err_cut true when the budget is exceeded', () => {
+  withMetricsFile((metricsFile) => {
+    raw(payload(CASES['17 20 error lines x 400']), { CONTEXT_TRIM_METRICS_FILE: metricsFile });
+    const entries = readTelemetry(metricsFile);
+    const entry = entries[entries.length - 1];
+    assert.equal(entry.path, 'error');
+    assert.equal(entry.err_cut, true);
+    assert.ok(entry.err_lines_omitted > 0);
+  });
+});
+
+test('telemetry: error path with err_cut false when nothing was cut', () => {
+  withMetricsFile((metricsFile) => {
+    raw(payload(CASES['9  real error mid-stream']), { CONTEXT_TRIM_METRICS_FILE: metricsFile });
+    const entries = readTelemetry(metricsFile);
+    const entry = entries[entries.length - 1];
+    assert.equal(entry.path, 'error');
+    assert.equal(entry.err_cut, false);
+    assert.equal(entry.err_lines_omitted, 0);
+  });
+});
+
+test('telemetry: looks_structured reflects the first non-whitespace char, does not affect truncation', () => {
+  withMetricsFile((metricsFile) => {
+    const jsonBody = JSON.stringify({ rows: Array.from({ length: 400 }, (_, i) => ({ i, v: 'z'.repeat(20) })) });
+    raw(payload(jsonBody), { CONTEXT_TRIM_METRICS_FILE: metricsFile });
+    const entries = readTelemetry(metricsFile);
+    const entry = entries[entries.length - 1];
+    assert.equal(entry.looks_structured, true);
+  });
+});
+
+test('telemetry: never breaks the hook even if the log directory cannot be created', () => {
+  // Point at a path whose parent cannot exist as a directory (a file used as
+  // a directory segment). The hook must still emit its normal output.
+  withMetricsFile((metricsFile) => {
+    fs.writeFileSync(metricsFile, 'not a directory');
+    const badPath = path.join(metricsFile, 'nested', 'metrics.jsonl');
+    const p = spawnSync(process.execPath, [SCRIPT], {
+      input: JSON.stringify(payload(lines(300, 300))),
+      encoding: 'utf8',
+      env: { ...process.env, CONTEXT_TRIM_METRICS_FILE: badPath },
+    });
+    assert.equal(p.status, 0);
+    assert.ok((p.stdout || '').trim().length > 0);
+  });
 });

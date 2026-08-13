@@ -45,12 +45,27 @@ const STALE_START_MS = 720 * 60 * 1000; // 12h, matches the old `find -mmin +720
 function readStdin() {
   return new Promise((resolve) => {
     let buf = '';
+    let timer = null;
+    const IDLE_MS = 5000;
+    const resetTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => resolve(buf), IDLE_MS);
+      timer.unref();
+    };
     process.stdin.setEncoding('utf8');
+    resetTimer();
     process.stdin.on('data', (c) => {
       buf += c;
+      resetTimer();
     });
-    process.stdin.on('end', () => resolve(buf));
-    process.stdin.on('error', () => resolve(buf));
+    process.stdin.on('end', () => {
+      if (timer) clearTimeout(timer);
+      resolve(buf);
+    });
+    process.stdin.on('error', () => {
+      if (timer) clearTimeout(timer);
+      resolve(buf);
+    });
   });
 }
 

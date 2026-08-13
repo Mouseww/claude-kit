@@ -6,7 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/truncate-verbose-output.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/truncate-verbose-output.mjs\"",
+            "timeout": 10
           }
         ]
       },
@@ -15,7 +16,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/measure-subagent.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/measure-subagent.mjs\"",
+            "timeout": 5
           }
         ]
       }
@@ -26,7 +28,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/measure-subagent.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/measure-subagent.mjs\"",
+            "timeout": 5
           }
         ]
       }
@@ -37,7 +40,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/measure-subagent.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/measure-subagent.mjs\"",
+            "timeout": 5
           }
         ]
       }
