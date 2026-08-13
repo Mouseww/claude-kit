@@ -6,7 +6,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/require-task-plan.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/require-task-plan.mjs\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/nudge-content-fetch.mjs\"",
+            "timeout": 5
           }
         ]
       }
@@ -17,7 +28,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/nudge-subagent-delegation.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/nudge-subagent-delegation.mjs\"",
+            "timeout": 5
           }
         ]
       },
@@ -26,7 +38,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/track-task-plan.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/track-task-plan.mjs\"",
+            "timeout": 5
           }
         ]
       }

@@ -22,12 +22,27 @@ const STALE_MS = 24 * 60 * 60 * 1000;
 function readStdin() {
   return new Promise((resolve) => {
     let buf = '';
+    let timer = null;
+    const IDLE_MS = 5000;
+    const resetTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => resolve(buf), IDLE_MS);
+      timer.unref();
+    };
     process.stdin.setEncoding('utf8');
+    resetTimer();
     process.stdin.on('data', (c) => {
       buf += c;
+      resetTimer();
     });
-    process.stdin.on('end', () => resolve(buf));
-    process.stdin.on('error', () => resolve(buf));
+    process.stdin.on('end', () => {
+      if (timer) clearTimeout(timer);
+      resolve(buf);
+    });
+    process.stdin.on('error', () => {
+      if (timer) clearTimeout(timer);
+      resolve(buf);
+    });
   });
 }
 
@@ -62,7 +77,14 @@ async function main() {
   quiet(() => {
     const cutoff = Date.now() - STALE_MS;
     for (const name of fs.readdirSync(STATE_DIR)) {
-      if (!name.startsWith('has-plan-') && !name.startsWith('nudged-')) continue;
+      if (
+        !name.startsWith('has-plan-') &&
+        !name.startsWith('nudged-') &&
+        !name.startsWith('bg-warned-') &&
+        !name.startsWith('unbounded-warned-') &&
+        !name.startsWith('content-fetch-warned-')
+      )
+        continue;
       const p = path.join(STATE_DIR, name);
       quiet(() => {
         if (fs.statSync(p).mtimeMs < cutoff) fs.unlinkSync(p);

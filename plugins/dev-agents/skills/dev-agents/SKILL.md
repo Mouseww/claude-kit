@@ -222,6 +222,36 @@ compaction; a sentence in the transcript does not.
 A hook pair backs this up (see below), but the rule stands on its own: the cost
 of a lost plan is redoing work, and the cost of the task list is a few seconds.
 
+## Bound the run, or background it
+
+A foreground dispatch gets killed by the user's next keystroke. This is not a
+possibility, it is the mechanism: a queued user message aborts an in-flight tool
+call, the agent side is left with `stoppedByUser: true`, and the main thread gets
+back an interrupted result. The implicit contract of a foreground dispatch is
+that the user waits quietly for it to return, and that contract only holds for a
+few minutes.
+
+So estimate the run before you dispatch. The signals that a call will run past
+five minutes: reading an entire subsystem, reviewing a full exec-plan phase, or a
+brief that says exhaustive, very thorough, the whole codebase, one by one. These
+are not hypothetical: a single fleet-evaluator audit stage ran 13 minutes, and a
+"very thorough" Explore ran 65.
+
+Anything past a few minutes has two ways out, and you take one of them. Either
+split it into multiple bounded dispatches, each with an explicit file list or one
+concrete question, or pass `run_in_background: true` and tell the user, in the
+same turn, that it is running in the background, so they know it is safe to keep
+talking. The default stays foreground (`run_in_background: false`), because the
+turn's logic depends on the return value.
+
+An interrupted or null result is a failure, not "still running." Getting back
+"Tool execution was interrupted" or null means the user stopped it, usually
+because they waited too long. Do not re-dispatch the same brief unchanged; that
+just gets it killed again. Respond to the user first, then decide whether to
+narrow the scope and redispatch or finish the work inline yourself. And unless
+the call actually went out with `run_in_background: true`, do not close the turn
+by saying you will continue once the agent finishes: nothing will call you back.
+
 ## The hooks
 
 Three hooks ship with this pack. All are reminders. None of them ever blocks a

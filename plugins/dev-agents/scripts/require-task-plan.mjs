@@ -55,15 +55,88 @@ const MESSAGE =
   'visible even after long subagent executions. If this really is a single self-contained ' +
   'delegation, ignore this and continue.';
 
+// ---- background-dispatch reminder ------------------------------------------
+// A user message that arrives while a foreground tool call is in flight kills
+// that call (stoppedByUser: true). A background dispatch survives, but only if
+// the model actually says so out loud, in this turn, so the user does not sit
+// there waiting for a call that already keeps running without them.
+const BACKGROUND_MESSAGE =
+  '[dev-agents] This subagent is being dispatched in the background (run_in_background: true). ' +
+  'Say so explicitly in this same turn: tell the user it is running in the background and that ' +
+  'anything they type next will not stop it. Do not end the turn with only a line like ' +
+  '"I will continue once it finishes" without stating that explicitly.';
+
+// ---- unbounded foreground-dispatch reminder --------------------------------
+// Claude Code interrupts an in-flight foreground tool call the moment a new
+// user message is queued, and the killed subagent comes back as
+// stoppedByUser: true. Two measured cases: fleet-evaluator ran 13 minutes,
+// an unbounded "Explore" brief ran 65 minutes. Users do not wait quietly that
+// long, so an unbounded foreground brief is a bug waiting to happen even
+// though nothing here is technically wrong.
+const UNBOUNDED_MARKERS = [
+  'very thorough',
+  'exhaustive',
+  'exhaustively',
+  'entire codebase',
+  'whole codebase',
+  'all files',
+  'every file',
+  '整个代码库',
+  '全部文件',
+  '逐个',
+  '穷尽',
+];
+const UNBOUNDED_AGENT = 'fleet-engineering:fleet-evaluator';
+
+function unboundedMatch(toolInput) {
+  if (toolInput?.subagent_type === UNBOUNDED_AGENT) {
+    return `${UNBOUNDED_AGENT} (measured 13 minutes)`;
+  }
+  const haystacks = [toolInput?.prompt, toolInput?.description].filter((s) => typeof s === 'string');
+  for (const text of haystacks) {
+    const lower = text.toLowerCase();
+    for (const marker of UNBOUNDED_MARKERS) {
+      if (lower.includes(marker.toLowerCase())) return marker;
+    }
+  }
+  return null;
+}
+
+function unboundedMessage(matched) {
+  return (
+    `[dev-agents] This foreground dispatch matched "${matched}", an unbounded scope. ` +
+    'Claude Code interrupts an in-flight foreground tool call the moment the user sends the next ' +
+    'message, and a brief this size has measured out at 10+ minutes; the user will not wait quietly ' +
+    'that long. Split it into bounded dispatches instead, each with an explicit file list or one ' +
+    'concrete question, or pass `run_in_background: true` and tell the user in this same turn that ' +
+    'it is running in the background.'
+  );
+}
+
 function readStdin() {
   return new Promise((resolve) => {
     let buf = '';
+    let timer = null;
+    const IDLE_MS = 5000;
+    const resetTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => resolve(buf), IDLE_MS);
+      timer.unref();
+    };
     process.stdin.setEncoding('utf8');
+    resetTimer();
     process.stdin.on('data', (c) => {
       buf += c;
+      resetTimer();
     });
-    process.stdin.on('end', () => resolve(buf));
-    process.stdin.on('error', () => resolve(buf));
+    process.stdin.on('end', () => {
+      if (timer) clearTimeout(timer);
+      resolve(buf);
+    });
+    process.stdin.on('error', () => {
+      if (timer) clearTimeout(timer);
+      resolve(buf);
+    });
   });
 }
 
@@ -95,25 +168,51 @@ async function main() {
 
   const session = String(input.session_id || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
 
-  // A plan exists: nothing to say.
-  if (fs.existsSync(path.join(STATE_DIR, `has-plan-${session}.flag`))) return;
-
   quiet(() => fs.mkdirSync(STATE_DIR, { recursive: true }));
-  const countFile = path.join(STATE_DIR, `nudged-${session}.count`);
 
-  const saved = quiet(() => fs.readFileSync(countFile, 'utf8').trim());
-  const seen = saved && /^\d+$/.test(saved) ? Number(saved) : 0;
-  const n = seen + 1;
-  quiet(() => fs.writeFileSync(countFile, String(n)));
+  const parts = [];
+  const toolInput = input.tool_input || {};
+  const isBackground = toolInput.run_in_background === true;
 
-  // Fire on the first planless dispatch, then every REPEAT_EVERY after it.
-  if (n !== 1 && n % REPEAT_EVERY !== 0) return;
+  // Background-dispatch reminder: independent of the plan check below, at most
+  // once per session.
+  const bgFlag = path.join(STATE_DIR, `bg-warned-${session}.flag`);
+  if (isBackground && !fs.existsSync(bgFlag)) {
+    quiet(() => fs.writeFileSync(bgFlag, '1'));
+    parts.push(BACKGROUND_MESSAGE);
+  }
+
+  // Unbounded foreground-dispatch reminder: only applies when not background,
+  // at most once per session.
+  if (!isBackground) {
+    const matched = unboundedMatch(toolInput);
+    const unboundedFlag = path.join(STATE_DIR, `unbounded-warned-${session}.flag`);
+    if (matched && !fs.existsSync(unboundedFlag)) {
+      quiet(() => fs.writeFileSync(unboundedFlag, '1'));
+      parts.push(unboundedMessage(matched));
+    }
+  }
+
+  // A plan exists: skip the plan reminder, but still emit anything collected above.
+  if (!fs.existsSync(path.join(STATE_DIR, `has-plan-${session}.flag`))) {
+    const countFile = path.join(STATE_DIR, `nudged-${session}.count`);
+
+    const saved = quiet(() => fs.readFileSync(countFile, 'utf8').trim());
+    const seen = saved && /^\d+$/.test(saved) ? Number(saved) : 0;
+    const n = seen + 1;
+    quiet(() => fs.writeFileSync(countFile, String(n)));
+
+    // Fire on the first planless dispatch, then every REPEAT_EVERY after it.
+    if (n === 1 || n % REPEAT_EVERY === 0) parts.push(MESSAGE);
+  }
+
+  if (parts.length === 0) return;
 
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
-        additionalContext: MESSAGE,
+        additionalContext: parts.join('\n\n'),
       },
     }) + '\n'
   );
