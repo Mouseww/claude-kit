@@ -99,7 +99,7 @@ Restart after that and the daily check takes over.
 
 | What | Happens on its own |
 |---|---|
-| Verbose output | A long build or test log comes back truncated behind a `[context-trim: ...]` header. If it looks like a failure, the error lines and the final verdict survive |
+| Verbose output | A failing build or test log comes back truncated behind a `[context-trim: ...]` header, with the error lines and the final verdict kept. Clean output is left whole unless it is very large |
 | Delegation | Claude picks a subagent by its description, already bound to the right model tier |
 | Reminders | Three hooks nudge you after a long solo stretch, or when dispatching with no task plan. None of them ever blocks a call |
 | Metrics | Every subagent call is logged to `~/.claude/context-offload-metrics.jsonl` |
@@ -154,12 +154,21 @@ writes files itself. For that you still want `/model opusplan`.
 
 ### `context-trim`
 
-Replaces verbose tool output with a head/tail slice. When the output looks like a
-failure it keeps the lines around the error keywords and forces the last lines to
-survive, because a test run's verdict is at the end. Measured on real logs: 92,589
-chars down to 4,449. It never makes context bigger, passing output through
-untouched when the replacement would save less than 20%. Thresholds are constants
-at the top of `plugins/context-trim/scripts/truncate-verbose-output.mjs`.
+Cuts failing command output down to the error lines plus the final verdict, because
+a test run's verdict is at the end. Measured on real logs: 92,589 chars down to
+4,449.
+
+Clean output is a different problem and gets different treatment. Cutting a result
+the model deliberately went and fetched is how you get it to fetch the result
+again, and that rerun costs more than the trim saved. So clean output passes
+through whole until 30,000 chars, and picks up a "use Read instead" tip rather than
+losing its middle. Over 329 real invocations the failure path produced 76% of all
+savings from 74% of the truncations; the reasoning and the break-even arithmetic
+are in the skill.
+
+It never makes context bigger, passing output through untouched when the
+replacement would save less than 20%. Thresholds are constants at the top of
+`plugins/context-trim/scripts/truncate-verbose-output.mjs`.
 
 Its second hook logs every subagent call, which answers three otherwise invisible
 questions: which agents you never actually use, how much context each delegation

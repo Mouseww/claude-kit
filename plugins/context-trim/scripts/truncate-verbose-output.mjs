@@ -34,6 +34,40 @@ import path from 'node:path';
 //   3. If discarded, set OUTPUT_SHAPE = 'string' below and repeat step 1.
 //
 // ============================================================================
+// Why failure output and clean output get different thresholds
+// ============================================================================
+// Truncation is not free. When the slice drops the part the agent actually
+// wanted, the agent reruns the command, and that costs the wasted slice (which
+// stays in context forever), a fresh tool call, and the new output. Writing N
+// for the original size, K for the ~4700 chars any slice keeps, and p for the
+// probability of a rerun, truncation is a net loss when
+//
+//     p > (N - K) / (N + K)
+//
+// N=6000 loses at a 12% rerun rate. N=30000 needs 73%. So the break-even rate
+// RISES with N, while the real rerun rate FALLS with N: the middle of a huge
+// log is usually noise, the middle of an 8k result is usually the answer.
+// Below the crossover, truncating loses money.
+//
+// The two modes sit on opposite sides of it:
+//   - Failure output: the agent wanted a verdict. The useful content really is
+//     clustered around the keywords and the tail, and once it has the verdict
+//     it goes to the source rather than rerunning. Low p, so cut early (6000).
+//   - Clean output: the agent ran the command to GET the content, so the value
+//     is spread through it and the middle is often exactly what was asked for.
+//     High p, so only cut once N is large enough to survive a bad guess. 30000
+//     is where even a 70% rerun rate still breaks even.
+//
+// Measured over 329 real invocations before this split: the failure path
+// produced 76% of all savings from 74% of the truncations, while the clean
+// path fired 5 times for ~6.6k tokens total and paid for every rerun it caused.
+//
+// What replaces clean-mode truncation is the followup tip further down. For a
+// large clean result the hook now leaves the output intact and attaches the
+// "use Read/Grep instead" advice as additionalContext, which changes the NEXT
+// command instead of damaging this one.
+//
+// ============================================================================
 // Design notes: four bugs measured in v1, all fixed here and preserved in this
 // port.
 //   1. Budgets are in CHARACTERS, not lines. Line-based head/tail saved almost
@@ -47,16 +81,21 @@ import path from 'node:path';
 //   4. The failure branch always keeps the LAST N lines. v1 kept only the
 //      earliest matches, losing the "X failed" summary.
 //
-// Three invariants. Do not remove them regardless of how the algorithm changes:
+// Four invariants. Do not remove them regardless of how the algorithm changes:
 //   A. If the replacement is not meaningfully shorter, emit nothing. A
 //      truncation hook must never make context bigger.
 //   B. If the body came back empty, emit nothing. Otherwise we would replace
 //      the entire tool output with a one-line header and silently destroy it.
 //   C. The notice must describe the path actually taken, not the path intended.
+//   D. Never character-slice a structured payload. Half a JSON document neither
+//      parses nor answers the question, so the rerun rate is close to 1 and the
+//      inequality above can never come out in our favour.
 
 // ---- tunables --------------------------------------------------------------
 const OUTPUT_SHAPE = 'object'; // 'object' (Bash tool_response shape) or 'string'
-const MAX_CHARS = 6000; // below this, pass through untouched
+const MAX_CHARS_FAILURE = 6000; // failure output: below this, pass through untouched
+const MAX_CHARS_CLEAN = 30000; // clean output: below this, pass through untouched
+const ADVICE_MIN_CHARS = 6000; // above this, untruncated output still gets a narrowing tip
 const HEAD_BUDGET = 2000; // chars kept from the start (clean output)
 const TAIL_BUDGET = 2500; // chars kept from the end (clean output)
 const ERR_BUDGET = 3000; // chars kept for keyword context (failure output)
@@ -64,6 +103,10 @@ const TAIL_KEEP_LINES = 25; // lines kept from the end (failure output), capped 
 const TAIL_KEEP_CHARS = 2500; // ...this char cap, so a few very long lines cannot blow up
 const MIN_SAVING_PCT = 20; // only replace if we save at least this much
 // -----------------------------------------------------------------------------
+
+// Cheapest gate that can still be wrong in our favour: below this nothing can
+// happen, so we skip mode detection entirely. Derived, never set by hand.
+const MAX_CHARS_MIN = Math.min(MAX_CHARS_FAILURE, MAX_CHARS_CLEAN, ADVICE_MIN_CHARS);
 
 // ---- telemetry --------------------------------------------------------------
 // Best-effort, fail-open logging into the same file measure-subagent.mjs
@@ -85,10 +128,21 @@ function quiet(fn) {
   }
 }
 
-// Heuristic only, NOT reliable JSON/structured-output detection: a log line
-// like "[2026-08-13] build started" false-positives here. Safe only for
-// telemetry aggregation -- never use this to change truncation behaviour or
-// to write anything into a user-visible notice.
+// Heuristic, NOT reliable JSON detection: a log line like "[2026-08-13] build
+// started" false-positives here. It has exactly two permitted uses.
+//
+//   1. Telemetry aggregation, as before.
+//   2. Invariant D: suppressing the character-slice path.
+//
+// Use 2 is safe despite the weak heuristic, because of WHERE it is consulted.
+// Character mode is only reached when the payload has too few line breaks to
+// slice by line, and the classic false positive is a LOG LINE -- a log has line
+// breaks, so it never reaches that decision. Getting it wrong in the remaining
+// cases costs a missed saving (a large blob passes through intact); getting the
+// opposite wrong would cut a JSON document in half. Prefer the missed saving.
+//
+// Still never write it into a user-visible notice: a wrong claim about the
+// payload's format is worse than no claim.
 function looksStructured(s) {
   const t = s.trimStart();
   return t.length > 0 && (t[0] === '{' || t[0] === '[');
@@ -200,10 +254,16 @@ function charModeBody(combined) {
 // not save anything. errCut/errLinesOmitted are only meaningful for the
 // 'error' path (whether the matching-line budget forced a cut, and how many
 // matched lines that cost); they are false/0 for the other two paths.
-function buildBody(combined, mode) {
+//
+// allowChar=false (Invariant D) turns every character-slice fallback into a
+// null return, which the caller treats as "pass the output through untouched".
+function buildBody(combined, mode, allowChar) {
+  const charFallback = () =>
+    allowChar ? { path: 'char', body: charModeBody(combined), errCut: false, errLinesOmitted: 0 } : null;
+
   const L = splitLines(combined);
   const n = L.length;
-  if (n === 0) return { path: 'char', body: charModeBody(combined), errCut: false, errLinesOmitted: 0 };
+  if (n === 0) return charFallback();
 
   const cost = (i) => L[i - 1].length + 1; // 1-indexed, matching the awk original
 
@@ -224,7 +284,7 @@ function buildBody(combined, mode) {
       acc += c;
       t = i;
     }
-    if (h >= t - 1) return { path: 'char', body: charModeBody(combined), errCut: false, errLinesOmitted: 0 };
+    if (h >= t - 1) return charFallback();
 
     let omit = 0;
     for (let i = h + 1; i <= t - 1; i++) omit += cost(i);
@@ -253,7 +313,7 @@ function buildBody(combined, mode) {
 
   // If the forced tail alone is already most of the input, line mode is
   // pointless: fall back to a character slice.
-  if (tlo <= 1) return { path: 'char', body: charModeBody(combined), errCut: false, errLinesOmitted: 0 };
+  if (tlo <= 1) return charFallback();
 
   const budget = Math.max(600, ERR_BUDGET - tailcost);
 
@@ -325,6 +385,21 @@ function makeNotice(path, origLen) {
     default:
       return `[context-trim: ${origLen} chars, too few line breaks to slice by line, cut by character position instead]`;
   }
+}
+
+// The advice-only notice, for output we deliberately left whole. It must not
+// claim anything was removed, or the model will try to recover content that is
+// still right there in front of it.
+function makeAdvice(origLen, followup) {
+  return `[context-trim: ${origLen} chars, left intact.${followup}]`;
+}
+
+function writeHookOutput(fields) {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: { hookEventName: 'PostToolUse', ...fields },
+    }) + '\n'
+  );
 }
 
 // ---- actionable-followup detection -----------------------------------------
@@ -430,36 +505,33 @@ async function main() {
     return;
   }
 
-  if (combined.length <= MAX_CHARS) {
+  // Every "leave the output alone" exit goes through here so the metrics log
+  // records one entry per invocation no matter which branch we took.
+  const passthrough = (len, extra) =>
     emitTelemetry({
       toolName: input.tool_name,
       sessionId: input.session_id,
       path: 'passthrough',
-      origLen: combined.length,
-      finalLen: combined.length,
+      origLen: len,
+      finalLen: len,
       errCut: false,
       errLinesOmitted: 0,
       source: combined,
+      ...extra,
     });
+
+  if (combined.length <= MAX_CHARS_MIN) {
+    passthrough(combined.length);
     return;
   }
 
   // Normalize CRLF so line handling behaves the same on every platform, then
-  // re-check the threshold: a CRLF-heavy payload can drop below MAX_CHARS here,
+  // re-check the threshold: a CRLF-heavy payload can drop below the gate here,
   // and truncating it would throw away hundreds of lines to save a few bytes.
   combined = combined.replace(/\r\n/g, '\n');
   const origLen = combined.length;
-  if (origLen <= MAX_CHARS) {
-    emitTelemetry({
-      toolName: input.tool_name,
-      sessionId: input.session_id,
-      path: 'passthrough',
-      origLen,
-      finalLen: origLen,
-      errCut: false,
-      errLinesOmitted: 0,
-      source: combined,
-    });
+  if (origLen <= MAX_CHARS_MIN) {
+    passthrough(origLen);
     return;
   }
 
@@ -468,37 +540,63 @@ async function main() {
   for (const re of FALSE_POSITIVES) cleaned = cleaned.replace(re, '');
   const mode = FAILURE_RE.test(cleaned) ? 'error' : 'clean';
 
-  const built = buildBody(combined, mode);
-  // Invariant B: never proceed on an empty body.
-  if (!built || !built.body) {
-    emitTelemetry({
-      toolName: input.tool_name,
-      sessionId: input.session_id,
-      path: 'passthrough',
-      origLen,
-      finalLen: origLen,
-      errCut: false,
-      errLinesOmitted: 0,
-      source: combined,
-    });
-    return;
-  }
-
-  let { path, body } = built;
-
-  // The followup suggestion (if any) is appended to the notice itself, and is
-  // folded into every length check below, so it counts against Invariant A's
-  // saving floor the same as the rest of the notice: a suggestion can never
-  // push a would-have-passed-through case into being replaced.
+  // The followup suggestion is computed before the threshold check because it
+  // is now useful on both sides of it: appended to the notice when we truncate,
+  // and emitted on its own when we deliberately do not. Where it does go into
+  // a notice it is folded into every length check below, so it counts against
+  // Invariant A's saving floor the same as the rest of the notice: a suggestion
+  // can never push a would-have-passed-through case into being replaced.
   const commandText = String(
     (input.tool_input && typeof input.tool_input === 'object' && (input.tool_input.command || input.tool_input.script)) || ''
   );
   const followup = classifyCommand(commandText) || '';
 
+  // Per-mode threshold. See the header note on why clean output is left alone
+  // until it is five times larger than failure output.
+  const cutAbove = mode === 'error' ? MAX_CHARS_FAILURE : MAX_CHARS_CLEAN;
+  if (origLen <= cutAbove) {
+    // Large enough to be worth narrowing next time, but not large enough that
+    // cutting it now would pay for itself. Hand back the advice and nothing
+    // else: the tool output reaches the model complete.
+    if (followup && origLen > ADVICE_MIN_CHARS) {
+      emitTelemetry({
+        toolName: input.tool_name,
+        sessionId: input.session_id,
+        path: 'advice',
+        origLen,
+        finalLen: origLen,
+        errCut: false,
+        errLinesOmitted: 0,
+        source: combined,
+      });
+      writeHookOutput({ additionalContext: makeAdvice(origLen, followup) });
+      return;
+    }
+    passthrough(origLen);
+    return;
+  }
+
+  // Invariant D: a structured payload must never be cut at a character offset.
+  const allowChar = !looksStructured(combined);
+
+  const built = buildBody(combined, mode, allowChar);
+  // Invariant B: never proceed on an empty body. Also the landing point for a
+  // char-slice suppressed by Invariant D.
+  if (!built || !built.body) {
+    passthrough(origLen);
+    return;
+  }
+
+  let { path, body } = built;
+
   let summary = `${makeNotice(path, origLen)}${followup}\n${body}`;
 
   // If line mode could not shrink it, try the character slice before giving up.
   if (summary.length >= origLen && path !== 'char') {
+    if (!allowChar) {
+      passthrough(origLen, { errCut: built.errCut, errLinesOmitted: built.errLinesOmitted });
+      return;
+    }
     path = 'char';
     body = charModeBody(combined);
     summary = `${makeNotice(path, origLen)}${followup}\n${body}`;
@@ -508,18 +606,9 @@ async function main() {
   // percentage floor we would happily drop 600 lines to save 19 characters.
   // Checked against the full summary (notice + followup + body) so the
   // followup text cannot sneak a case past the floor.
-  const threshold = origLen - Math.floor((origLen * MIN_SAVING_PCT) / 100);
-  if (summary.length >= threshold) {
-    emitTelemetry({
-      toolName: input.tool_name,
-      sessionId: input.session_id,
-      path: 'passthrough',
-      origLen,
-      finalLen: origLen,
-      errCut: built.errCut,
-      errLinesOmitted: built.errLinesOmitted,
-      source: combined,
-    });
+  const savingFloor = origLen - Math.floor((origLen * MIN_SAVING_PCT) / 100);
+  if (summary.length >= savingFloor) {
+    passthrough(origLen, { errCut: built.errCut, errLinesOmitted: built.errLinesOmitted });
     return;
   }
 
@@ -547,14 +636,7 @@ async function main() {
     source: combined,
   });
 
-  process.stdout.write(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: 'PostToolUse',
-        updatedToolOutput: updated,
-      },
-    }) + '\n'
-  );
+  writeHookOutput({ updatedToolOutput: updated });
 }
 
 main().catch(() => process.exit(0));

@@ -1,7 +1,7 @@
 {
   "name": "context-trim",
-  "version": "1.2.0",
-  "description": "Truncates long command output before it reaches the model, keeping error context and the tail summary when something fails. Also logs per-subagent cost so you can check whether delegating pays off. No agents, no prompting, nothing to remember.",
+  "version": "1.3.0",
+  "description": "Truncates failing command output before it reaches the model, keeping the error context and the tail summary. Leaves clean output intact until it is genuinely huge, and attaches a narrowing tip instead, because cutting a result the agent asked for just makes it run the command again. Also logs per-subagent cost so you can check whether delegating pays off. No agents, no prompting, nothing to remember.",
   "keywords": [
     "context",
     "token",
