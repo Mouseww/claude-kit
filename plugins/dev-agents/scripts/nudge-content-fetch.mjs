@@ -1,12 +1,19 @@
 #!/usr/bin/env node
 // PreToolUse hook (matcher: Bash|PowerShell) for the dev-agents plugin.
 //
-// context-trim's truncate-verbose-output.mjs silently drops the middle of any
-// Bash/PowerShell output over 6000 characters (clean mode keeps only the first
-// 2000 and last 2500 chars). A command run to FETCH content -- read a file,
-// search text, list a tree, fetch a URL, dump git/log content -- routinely
-// produces output that size, and the loss is invisible: the model never sees
-// a truncation notice for the part that mattered.
+// A command run to FETCH content -- read a file, search text, list a tree,
+// fetch a URL, dump git/log content -- puts the whole result into context
+// whether or not the model needed all of it, while Read/Grep/Glob/WebFetch take
+// the slice up front.
+//
+// This hook used to justify itself with context-trim's truncation. That
+// rationale is gone as of context-trim 1.3.0: clean output now passes through
+// intact below 30000 characters, precisely because cutting a result the model
+// went and fetched is what makes it fetch the result again. The two packs now
+// split the job cleanly -- this hook is the cheap pre-emptive nudge that stops
+// the dump from happening, and context-trim's advice path is the post-hoc one
+// that fires only when the output really did come back large. Prefer this one:
+// it is the only one that can still prevent the cost.
 //
 // This is a reminder, not a block. It never denies the tool call, and it never
 // touches command output; it only reads tool_input.command before the command
@@ -36,9 +43,14 @@ import path from 'node:path';
 const STATE_DIR = path.join(os.tmpdir(), 'claude-context-offload');
 const FLAG_PREFIX = 'content-fetch-warned-';
 
-const TRUNCATION_WHY =
-  'truncation kicks in past 6000 characters, and clean mode keeps only the first 2000 and last ' +
-  '2500 characters, so a large result silently loses most of its middle.';
+// Interpolated after "Bash/PowerShell output", so it has to read as a
+// continuation of that phrase. Do not reintroduce a claim that the output will
+// be truncated: context-trim leaves clean output intact below 30000 characters,
+// and a reminder arguing from a premise the model can check and find false is
+// worse than no reminder.
+const SHELL_DUMP_WHY =
+  'lands in context whole, however little of it you need, and stays there for the rest of the ' +
+  'session. The dedicated tool takes the slice up front instead.';
 
 // ---- shared shell-level exemptions ------------------------------------------
 // Any one of these being true means the command is already narrowed (or is a
@@ -162,13 +174,13 @@ function buildMessage(category, matched, cmd) {
   if (category.kind === 'tool') {
     return (
       `${prefix} This command ("${matched}" in \`${cmd}\`) fetches content through Bash/PowerShell. ` +
-      `Use ${category.advice} instead of running it through the shell. Bash/PowerShell output ${TRUNCATION_WHY}`
+      `Use ${category.advice} instead of running it through the shell. Bash/PowerShell output ${SHELL_DUMP_WHY}`
     );
   }
   return (
     `${prefix} This command ("${matched}" in \`${cmd}\`) can return a large amount of content through ` +
     `Bash/PowerShell. There is no dedicated tool for this; narrow it at the source instead: ${category.advice}. ` +
-    `Bash/PowerShell output ${TRUNCATION_WHY}`
+    `Bash/PowerShell output ${SHELL_DUMP_WHY}`
   );
 }
 
