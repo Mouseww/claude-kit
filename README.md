@@ -27,6 +27,7 @@ Then, in any Claude Code session:
 ```
 /plugin marketplace add https://github.com/Mouseww/claude-kit.git
 /plugin install dev-agents@claude-kit
+/plugin install concrete-answers@claude-kit
 /plugin install context-trim@claude-kit
 /plugin install claude-kit-meta@claude-kit
 ```
@@ -38,16 +39,19 @@ Restart the session if the agents do not show up under `/agents`.
 desktop app use the CLI form of the same commands: `claude plugin marketplace add
 <url>`, then `claude plugin install <pack>@claude-kit`.
 
-**One extra step for `dev-agents`, and it is the one that matters:**
+**One extra step for the two packs that ship a resident block, and it is the one
+that matters:**
 
 ```
 /dev-agents:sync-claude-md --target user
+/concrete-answers:sync-claude-md --target user
 ```
 
-A skill only enters context when it is invoked. That command installs the
-delegation policy as a resident `CLAUDE.md` block instead, which is what actually
-changes default behaviour. It writes only between managed markers, saves a `.bak`
-first, is idempotent, and `--remove` takes it back out.
+A skill only enters context when it is invoked. Those commands install the
+delegation policy and the reporting rules as resident `CLAUDE.md` blocks instead,
+which is what actually changes default behaviour. Each writes only between its own
+managed markers, saves a `.bak` first, is idempotent, and `--remove` takes it back
+out.
 
 ### For a whole project, so the team gets it
 
@@ -101,7 +105,8 @@ Restart after that and the daily check takes over.
 |---|---|
 | Verbose output | A failing build or test log comes back truncated behind a `[context-trim: ...]` header, with the error lines and the final verdict kept. Clean output is left whole unless it is very large |
 | Delegation | Claude picks a subagent by its description, already bound to the right model tier |
-| Reminders | Three hooks nudge you after a long solo stretch, or when dispatching with no task plan. None of them ever blocks a call |
+| Reminders | Five hooks nudge you after a long solo stretch, when dispatching with no task plan, when a dispatch comes back interrupted, empty or suspiciously thin, and when the fable-tier last resort is about to be called. None of them ever blocks a call |
+| Reporting | Answers name real paths, symbols and commands instead of stand-in labels like `$1.1` or shape-words like "improved robustness" |
 | Metrics | Every subagent call is logged to `~/.claude/context-offload-metrics.jsonl` |
 
 **To be explicit, name what you want in plain language:**
@@ -116,6 +121,7 @@ hand the migration to dev-agents:devops-engineer
 | Command | Does |
 |---|---|
 | `/dev-agents:sync-claude-md` | Install or refresh the resident delegation block |
+| `/concrete-answers:sync-claude-md` | Install or refresh the resident reporting block |
 | `/claude-kit-meta:list` | Show the packs and what each one ships |
 | `/claude-kit-meta:install-here <names>` | Enable packs for the current project |
 | `/claude-kit-meta:new-plugin <name> <desc>` | Scaffold a new pack and register it |
@@ -137,11 +143,16 @@ hand the migration to dev-agents:devops-engineer
 
 ### `dev-agents`
 
-Ten subagents with the model tier fixed per role, so you never pass `model` by
+Eleven subagents with the model tier fixed per role, so you never pass `model` by
 hand. `quick-read` (haiku) reads, searches and summarizes with no write access;
 `quick-io` (sonnet) makes edits that follow a rule you can state; `deepthink`
 (opus) decides and writes design docs but never touches source. Seven role agents
 cover spec, backend, frontend, UI/UX, tests, review and ops.
+
+The eleventh, `last-resort` (fable), is gated rather than routed: it is for a
+problem the opus tier has already failed to solve, and a hook prints its four
+preconditions on every dispatch, because an accidental call is the most expensive
+mistake this pack can make.
 
 Two separate things make it pay. A subagent's raw output stays in its own context,
 so only the conclusion comes back. And its typing runs on a cheaper tier, which
