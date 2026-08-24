@@ -1,0 +1,7 @@
+{
+  "name": "concrete-answers",
+  "version": "1.0.0",
+  "description": "Forces every answer to name the real thing: a file path, a symbol, a command that was run, a business entity, a module that exists in this repo. Bans stand-in labels the user never wrote (`$1.1`, \"step 2\", \"the module in question\") and the filler abstractions that make a report readable but unverifiable (\"optimized the logic\", \"improved robustness\"). Also applies to summaries relayed from a subagent: a generic summary gets specifics fetched, not passed on. One resident CLAUDE.md block plus a skill holding the long form.",
+  "keywords": ["communication", "reporting", "clarity", "verifiability"],
+  "license": "MIT"
+}
