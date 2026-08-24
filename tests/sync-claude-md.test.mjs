@@ -224,5 +224,9 @@ test('rejects an unknown plugin instead of writing anything', () => {
 test('the shipped block stays small enough to sit in context every turn', () => {
   // It is resident on every turn, so growth here is a real recurring cost.
   // Raise this ceiling deliberately, not by accident.
-  assert.ok(BODY.length < 3500, `block is ${BODY.length} chars; keep it under 3500`);
+  //
+  // Raised 3500 -> 4100 on 2026-08-20 to buy the "then check what came back"
+  // rule: the pack warned before a dispatch and said nothing about the result,
+  // so an interrupted or blocked subagent got treated as a finished one.
+  assert.ok(BODY.length < 4100, `block is ${BODY.length} chars; keep it under 4100`);
 });

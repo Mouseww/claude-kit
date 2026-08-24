@@ -1,11 +1,11 @@
 ---
 name: dev-agents
-description: Use when a task is long or multi-step and you are deciding what to do yourself versus hand to a subagent - searching code, reading several files, running commands with verbose output, needing an independent review, or weighing several designs. Explains which of the ten packaged agents to pick, what model tier each is bound to, how to brief one so the handoff is not a net loss, and when delegating is the wrong call. Apply it even when nobody mentioned saving tokens.
+description: Use when a task is long or multi-step and you are deciding what to do yourself versus hand to a subagent - searching code, reading several files, running commands with verbose output, needing an independent review, or weighing several designs. Explains which of the eleven packaged agents to pick, what model tier each is bound to, how to brief one so the handoff is not a net loss, and when delegating is the wrong call. Apply it even when nobody mentioned saving tokens.
 ---
 
 # dev-agents
 
-Ten subagents with the model tier fixed per role, three reminder hooks, and a
+Eleven subagents with the model tier fixed per role, five reminder hooks, and a
 `CLAUDE.md` block.
 
 **Read this only when you need the reasoning.** The pack's day-to-day behaviour
@@ -114,6 +114,43 @@ For delegating a whole coherent chunk of a role, with the tier already bound.
 
 Installed through this plugin the ids are namespaced: `dev-agents:quick-read`,
 `dev-agents:backend-dev`, and so on.
+
+### The last resort
+
+| Agent | Model | For |
+|---|---|---|
+| `last-resort` | fable | A problem an opus-tier attempt has already failed to solve. Analysis document only, never implements |
+
+This one is different in kind from the other ten. They are routed by *what the
+work is*; this one is gated on *what has already been tried*. All four have to
+hold before it is worth its cost:
+
+1. A cheaper agent genuinely attempted the problem, and you can say what it
+   concluded. "It looks hard" is not an attempt.
+2. The failure is an observed behaviour, not an inference from reading code.
+3. The brief lists what was already tried and ruled out, so the dispatch does
+   not re-run it.
+4. The blocker is reasoning, not missing context. If a `quick-read` could just
+   go and fetch the fact, that is the cheaper next step.
+
+Any one of those failing points at a cheaper action, which is why the fourth is
+in the list at all: an impasse that is really a missing file is the most common
+false positive.
+
+Its prompt tells it to attack the problem *statement* before the problem, on the
+premise that an impasse surviving an opus attempt is usually a wrong framing, an
+unchecked constraint or an inherited assumption rather than a missing technique.
+It has `Bash` specifically to reproduce the reported failure, because "the
+failure is not what it was described as" is a real and common answer. It has
+`Write` but not `Edit`, the same guardrail as `deepthink`: conclusions, never
+source.
+
+Two instructions in it exist to counter its own tier. It is told to say so
+plainly when the answer turns out to be small, rather than inflating to justify
+the call. And it is told to push bulk reading down to `quick-read` rather than
+spending the most expensive context in the session on file dumps.
+
+`gate-last-resort` (below) prints the four preconditions on every dispatch.
 
 ## When to delegate
 
@@ -244,17 +281,50 @@ same turn, that it is running in the background, so they know it is safe to keep
 talking. The default stays foreground (`run_in_background: false`), because the
 turn's logic depends on the return value.
 
-An interrupted or null result is a failure, not "still running." Getting back
-"Tool execution was interrupted" or null means the user stopped it, usually
-because they waited too long. Do not re-dispatch the same brief unchanged; that
-just gets it killed again. Respond to the user first, then decide whether to
-narrow the scope and redispatch or finish the work inline yourself. And unless
-the call actually went out with `run_in_background: true`, do not close the turn
-by saying you will continue once the agent finishes: nothing will call you back.
+One brief-level rule falls out of this: **never put a blocking command in a
+brief.** A dev server, `tail -f`, a file watcher, an interactive prompt, a
+`git rebase -i`: the subagent runs it, the command never returns, and the agent
+sits there until something kills it. From the outside that is indistinguishable
+from thinking hard, which is what makes it expensive. If the work needs a server
+running, say to start it detached and poll it, or hand that part to
+`devops-engineer`, which has the pattern.
+
+## Check the return, do not assume it
+
+A dispatch is not finished because it returned. Four outcomes look like success
+from the main thread and are not:
+
+| What comes back | What it usually means |
+|---|---|
+| `Tool execution was interrupted`, or null | The user sent a message while it ran, so the call was killed |
+| An empty final message | It crashed, or ran out of turns, or had nothing it was allowed to say |
+| Two lines of prose with no file, symbol or number | It never got to the work: a path it could not find, a command denied by `permissions`, a scope it declined |
+| An acknowledgement from a backgrounded call | Nothing has happened yet; the result arrives later |
+
+All four are failures to act on, not progress to report. The rules:
+
+- **Do not re-dispatch the same brief unchanged.** An interrupted brief gets
+  interrupted again; a blocked brief gets blocked again. Change the scope, supply
+  the missing path, or finish it inline.
+- **Respond to the user first.** They stopped it, or they are waiting on
+  something that silently did not happen. Say which.
+- **Never report the underlying task as done** on a result you did not receive.
+  This is the failure that actually costs the user something: a summary of work
+  that was never performed.
+- **Treat a thin return as a question, not an answer.** Go verify the one fact
+  you need out of it, or redispatch with the missing context supplied.
+- **A backgrounded call is an ack.** Read the real output before making claims
+  about it. And unless the call actually went out with
+  `run_in_background: true`, do not close the turn by saying you will continue
+  once the agent finishes: nothing will call you back.
+
+`check-subagent-return` (below) fires on the first three of these, but it is a
+reminder about one call. Noticing that a whole chain of dispatches has quietly
+produced nothing is still the main thread's job.
 
 ## The hooks
 
-Three hooks ship with this pack. All are reminders. None of them ever blocks a
+Five hooks ship with this pack. All are reminders. None of them ever blocks a
 tool call.
 
 ### `nudge-subagent-delegation`
@@ -292,6 +362,45 @@ back rather than staying silenced.
 
 Set `REPEAT_EVERY = 1` at the top of `scripts/require-task-plan.mjs` to nudge on
 every planless dispatch instead.
+
+### `check-subagent-return`
+
+PostToolUse on `Agent`, the counterpart to the pair above: they fire before a
+dispatch, this one fires on what comes back. Three branches, checked in order,
+and at most one speaks per call.
+
+| Branch | Condition | Throttle |
+|---|---|---|
+| Background ack | the call went out with `run_in_background: true` | once per session |
+| Failure | `tool_response` null, a truthy `interrupted` / `stoppedByUser` / `toolDenialKind` / `is_error` / `error` flag, an interruption marker in the text, or empty text | none, every time |
+| Thin result | returned text shorter than `THIN_CHARS` (80) | first, then every third |
+
+The failure branch is deliberately unthrottled: a dispatch that did not happen
+is worth interrupting for every single time, and unlike the write-streak nudge
+there is no judgement call for it to get wrong.
+
+The reason `tool_response` is probed rather than read is that its shape is
+version dependent, the same caveat `measure-subagent.mjs` carries: it may be a
+string, an array of content blocks, an object with `.content`, or something
+else. The script extracts text from all of those and, separately, keeps the
+response object so its flags can still be inspected when no text comes out.
+
+It never fires inside a subagent. Tunables (`THIN_CHARS`, `REPEAT_EVERY`) are at
+the top of `scripts/check-subagent-return.mjs`.
+
+### `gate-last-resort`
+
+PreToolUse on `Agent`, firing only when the dispatched `subagent_type` contains
+`last-resort` (a substring test, so both the bare and the namespaced id match).
+It prints the four preconditions from
+[The last resort](#the-last-resort) and asks for them to be confirmed out loud in
+that turn.
+
+Deliberately **unthrottled and stateless**, unlike `require-task-plan`. That hook
+throttles because a planless dispatch is common and nagging it is worse than
+missing one. This dispatch is rare by definition and the most expensive mistake
+the pack can make, so it gets the full checklist every single time and keeps no
+flag file to go stale.
 
 ## The honest limit: this does not control the main thread's model
 

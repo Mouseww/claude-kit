@@ -25,8 +25,10 @@ Vague request in, structured spec out -> `requirements-analyst`. Proposal or pla
 
 **Task plan before dispatching.** For tasks with more than two steps, create the task plan before dispatching any subagent, one task per step with its expected output, and mark each completed as you go. A long subagent run plus context compaction can discard a plan that exists only in the conversation.
 
-**Bound the run, or background it.** A foreground dispatch dies the moment the user sends the next message; what comes back is interrupted, not paused. Estimate before dispatching: past a few minutes, split into bounded dispatches or pass `run_in_background: true` and say so that turn. Treat interrupted or null as failure: never redispatch the same brief, and never promise to continue once the agent returns unless it is actually backgrounded.
+**Bound the run, or background it.** A foreground dispatch dies the moment the user sends the next message; what comes back is interrupted, not paused. Estimate before dispatching: past a few minutes, split into bounded dispatches or pass `run_in_background: true` and say so that turn. Never leave a blocking command in a brief (a dev server, `tail -f`, a watcher, anything interactive): it hangs the agent until something kills it.
 
-Rules: run independent subtasks in parallel (several Agent calls in one message); give each subagent enough context to start cold; ask for conclusions plus `file:line` refs, not raw file contents; never re-read a file you just edited.
+**Then check what came back.** Interrupted, null, empty or suspiciously thin is a **failure**, not progress: usually the brief was blocked, by a file it could not find, a command that hung or was denied, or a scope it declined. Say so, never redispatch the same brief unchanged, and never report the task done on a result you did not get. A backgrounded return is only an acknowledgement: read the real output before claiming anything from it, and never promise to continue once an agent finishes unless it actually is backgrounded.
+
+Rules: run independent subtasks in parallel (several Agent calls in one message); give each subagent enough context to start cold; never re-read a file you just edited.
 
 Delegation is not free: the subagent re-pays its system prompt plus your brief, and the main thread pays for the summary. Skip it for a single trivial edit, tight interactive back-and-forth, fresh judgement each time, net-new content, or when reading one or two files beats writing the brief. Full policy: the `dev-agents` skill.
