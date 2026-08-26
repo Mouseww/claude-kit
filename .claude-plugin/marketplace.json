@@ -7,7 +7,7 @@
   },
   "metadata": {
     "description": "Personal Claude Code capability repository",
-    "version": "1.2.0"
+    "version": "1.3.0"
   },
   "plugins": [
     {
@@ -16,6 +16,13 @@
       "description": "Install and manage claude-kit itself. Provides /claude-kit-meta:install-here to enable chosen plugins for the current project, /claude-kit-meta:list to see what is available, and /claude-kit-meta:new-plugin to scaffold a new capability pack.",
       "category": "productivity",
       "tags": ["meta", "installer", "scaffold"]
+    },
+    {
+      "name": "code-graph",
+      "source": "./plugins/code-graph",
+      "description": "Wires the code-review-graph MCP server into delegated reads so 'who calls this', 'what breaks if I change this' and 'what tests cover this' become one deterministic graph query instead of a grep sweep across the repo. Depends on the external `code-review-graph` Python package (`pip install code-review-graph` or `uv tool install code-review-graph`), which this plugin does not install for you. Ships no hooks: the upstream project refreshes its graph on every Write/Edit/Bash call and injects status into every session start, which this plugin deliberately skips in favor of an explicit /code-graph:refresh you run when you want it. Disabled by default because it talks to a locally-run external service that has to be installed and opted into first. It also trims the upstream server's default ~30-tool surface (about 8.6k tokens of schema) down to 9 tools via `--tools`, and excludes the refactor-applying tools specifically because they write to source files, which this read-only pack does not do.",
+      "category": "productivity",
+      "tags": ["code-graph", "mcp", "grep", "delegation", "structural-search"]
     },
     {
       "name": "concrete-answers",

@@ -1,8 +1,10 @@
 # claude-kit
 
-Three Claude Code plugins that keep a long session cheap: subagents with the model
-tier already bound per role, automatic truncation of verbose command output, and a
-pack that manages this repository from inside Claude.
+Five Claude Code plugins that keep a long session cheap: subagents with the model
+tier already bound per role, automatic truncation of verbose command output, answers
+that name the real file instead of a stand-in label, a code graph that answers "who
+calls this" without a grep sweep, and a pack that manages this repository from
+inside Claude.
 
 Every hook and script is a single `.mjs`, so macOS, Linux and native Windows run
 identical code. `node` on `PATH` is the only requirement.
@@ -29,11 +31,17 @@ Then, in any Claude Code session:
 /plugin install dev-agents@claude-kit
 /plugin install concrete-answers@claude-kit
 /plugin install context-trim@claude-kit
+/plugin install code-graph@claude-kit
 /plugin install claude-kit-meta@claude-kit
 ```
 
 Install only the packs you want; they work on their own and better together.
 Restart the session if the agents do not show up under `/agents`.
+
+`code-graph` is the one pack here that installing does not turn on by itself:
+it ships `defaultEnabled: false` because it depends on an external CLI only you
+can install. Run `/code-graph:setup` once that CLI is in place — see `code-graph`
+under How it works for what it wires in and what it deliberately leaves out.
 
 `/plugin` is an interactive panel, so it exists only in a `claude` terminal. In the
 desktop app use the CLI form of the same commands: `claude plugin marketplace add
@@ -122,6 +130,8 @@ hand the migration to dev-agents:devops-engineer
 |---|---|
 | `/dev-agents:sync-claude-md` | Install or refresh the resident delegation block |
 | `/concrete-answers:sync-claude-md` | Install or refresh the resident reporting block |
+| `/code-graph:setup` | Check for the `code-review-graph` CLI, install it if missing, and build the initial graph |
+| `/code-graph:refresh` | Incrementally update the graph on demand, instead of on every edit |
 | `/claude-kit-meta:list` | Show the packs and what each one ships |
 | `/claude-kit-meta:install-here <names>` | Enable packs for the current project |
 | `/claude-kit-meta:new-plugin <name> <desc>` | Scaffold a new pack and register it |
@@ -163,6 +173,31 @@ the heaviest reading usually is.
 The honest limit: none of this controls which model the *main thread* uses when it
 writes files itself. For that you still want `/model opusplan`.
 
+Seven of the eleven agents also name a skill in their frontmatter that this
+repository does not ship: `security-review` (quality-reviewer), `api-design`
+(backend-dev), `deployment-patterns` (devops-engineer), `systematic-debugging`
+(deepthink and last-resort), `frontend-design` (frontend-dev and ui-ux-designer),
+`writing-plans` (requirements-analyst), and `e2e-testing` (test-engineer).
+`nesting-discipline` is the only companion skill that actually lives in this
+repo; the rest are meant to come from a user's global `~/.claude/skills` or
+another marketplace pack, so for anyone who installed only `dev-agents` the
+reference silently does nothing. Each of the seven is listed under
+`externalSkills` in `plugins/dev-agents/.claude-plugin/plugin.json` — a key
+Claude Code itself ignores, kept so this repo's validator, and anyone reading
+the manifest, can tell "not shipped here" apart from "missing by mistake."
+`scripts/validate.mjs` checks every skill an agent's frontmatter names against
+both the repo's own `plugins/*/skills/<name>/SKILL.md` paths and that
+allowlist: a misspelled name fails the build, an absent-but-allowlisted one
+does not, because these seven are not supposed to exist in this repo. It also
+warns when an allowlisted name turns out to already exist in the repo, since
+that means the allowlist entry has gone stale. None of the seven agents
+assumes its skill is loaded; each has fallback wording in its prompt body for
+the case where it is not. Anyone who wants the fuller behavior installs the
+same-named skill wherever their own `~/.claude/skills` or marketplace already
+keeps it — nothing in `dev-agents` needs to change for it to be picked up.
+Contributors adding a new agent that references a skill from outside this repo
+must add it to `externalSkills` in the same change, or the validator turns red.
+
 ### `context-trim`
 
 Cuts failing command output down to the error lines plus the final verdict, because
@@ -193,6 +228,72 @@ node plugins/context-trim/scripts/report-metrics.mjs
 The assumption that delegating beats reading inline might be wrong for your
 workload, and this is how you find out.
 
+### `code-graph`
+
+Wires the external `code-review-graph` MCP server (MIT, Python,
+https://github.com/tirth8205/code-review-graph) into delegated reads. It
+parses a repo into a local SQLite graph — nodes are functions, classes and
+imports, edges are calls, inheritance and test coverage — so "who calls this",
+"what breaks if I change this" and "what tests cover this" become one
+deterministic query instead of a grep sweep.
+
+This pack does not install the CLI. `uv tool install code-review-graph` or
+`pip install code-review-graph` has to happen first (Python 3.10 or newer),
+then `code-review-graph build` in the project root builds the graph, or
+`/code-graph:setup` walks through both steps. Never run
+`code-review-graph install`: that is the upstream project's own installer, and
+it rewrites the global MCP config and adds hooks this pack exists to avoid.
+
+It ships `defaultEnabled: false`. Installing the pack is not the same as
+turning it on — it depends on an executable only the user can install, so it
+needs an explicit opt-in rather than working the moment it lands.
+
+It also ships no hooks, a deliberate trade against the upstream project's own
+`hooks.json`, which refreshes the graph on every `Write`/`Edit`/`Bash` call (a
+30-second timeout each time) and injects `status` output at every session
+start. This pack skips both: every edit stays fast and no session gets
+unsolicited context, at the cost of a graph that can drift from the working
+tree between refreshes. Refresh it with `/code-graph:refresh`, or let the
+model call `build_or_update_graph_tool` itself, once a batch of edits
+plausibly changed call graphs, imports or test coverage.
+
+The upstream server exposes 30 MCP tools whose combined schema costs about
+8,592 tokens — a figure the upstream author documents in the source itself —
+sitting in every turn's system prompt for as long as the server stays
+connected. This pack cuts that to 9 with a `--tools` allowlist. Two of the
+removed tools, `apply_refactor_tool` and `refactor_tool`, are dropped as a
+safety boundary rather than for size: a pack that is supposed to be a
+read-only view of the code graph should not also be able to rewrite source
+files. `embed_graph_tool` is dropped because it can trigger vector embeddings,
+which may download a model or call out to the cloud.
+
+Nothing in the default configuration needs an account, an API key, or makes a
+network call — the base dependencies carry no HTTP client. The only paths that
+do reach outward are opt-in: cloud embeddings require
+`CRG_ACCEPT_CLOUD_EMBEDDINGS=1` set explicitly, the visualization falls back
+to a D3.js CDN, and the first semantic search can pull a model from
+HuggingFace; this pack's tool allowlist already excludes `embed_graph_tool`.
+That does not make the graph private on its own: a query's *result* still
+travels to Anthropic along with the rest of the context, the same as pasting
+the source in directly — the net effect is less data leaving, not none.
+`.code-review-graph/graph.db` is an unencrypted local database whose contents
+are equivalent to your source structure; treat it like source and add it to
+`.gitignore`.
+
+The upstream project is honest about where it is weak, and that honesty
+carries over here: its own semantic search sits around a 0.35 mean reciprocal
+rank, flow/data-flow detection recall is about 33%, and impact analysis is
+deliberately conservative, which means false positives are expected on a large
+dependency graph. Reach for the graph on deterministic structural questions —
+callers, blast radius, test coverage, cross-file inheritance — not on fuzzy
+semantic search. It narrows where to look; it does not replace reading the
+source.
+
+Measured on this repository itself — 30 files, mostly Markdown and `.mjs` — a
+build takes about 4 seconds and produces 371 nodes, 3,639 edges and a roughly
+4.8MB database. Expect all three numbers to grow substantially on a larger
+codebase.
+
 ### `claude-kit-meta`
 
 Wraps this repository's own scripts as the slash commands listed under Usage.
@@ -206,7 +307,7 @@ An edit here reaches nobody until the version moves. Bump the pack's `version` i
 
 ```bash
 node scripts/validate.mjs                                        # structure
-node --test "plugins/**/tests/*.test.mjs" "tests/*.test.mjs"     # 44 tests
+node --test "plugins/**/tests/*.test.mjs" "tests/*.test.mjs"     # 181 tests
 ```
 
 Both run in CI on Linux and Windows for every push. Run the validator even for a

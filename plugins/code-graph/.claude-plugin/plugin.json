@@ -1,0 +1,8 @@
+{
+  "name": "code-graph",
+  "version": "1.0.0",
+  "defaultEnabled": false,
+  "description": "Wires the code-review-graph MCP server into delegated reads so 'who calls this', 'what breaks if I change this' and 'what tests cover this' become one deterministic graph query instead of a grep sweep across the repo. Depends on the external `code-review-graph` Python package (`pip install code-review-graph` or `uv tool install code-review-graph`), which this plugin does not install for you. Ships no hooks: the upstream project refreshes its graph on every Write/Edit/Bash call and injects status into every session start, which this plugin deliberately skips in favor of an explicit /code-graph:refresh you run when you want it. Disabled by default because it talks to a locally-run external service that has to be installed and opted into first.",
+  "keywords": ["code-graph", "mcp", "grep", "delegation", "structural-search"],
+  "license": "MIT"
+}

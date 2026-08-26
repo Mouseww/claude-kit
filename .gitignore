@@ -11,3 +11,6 @@ settings.json.*.bak
 # OS noise
 .DS_Store
 Thumbs.db
+
+# Local graph database built by the code-graph pack's code-review-graph CLI
+.code-review-graph/
