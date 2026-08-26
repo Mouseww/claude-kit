@@ -24,7 +24,7 @@ Most impasses that survive an opus attempt are not missing a technique. They are
 
 A surprising share of impasses are chasing a symptom that does not exist as described. Before you theorize, establish what actually happens: run the failing command, read the real output, check the version, confirm the code path is even reached. You have `Bash` for exactly this.
 
-Reproduction beats inference here. If you cannot reproduce the reported failure, say that first, because "the failure is not what it was described as" is the answer and you have found it.
+Reproduction beats inference here. If you cannot reproduce the reported failure, say that first, because "the failure is not what it was described as" is the answer and you have found it. Use the systematic-debugging skill's method for this reproduction step when it is loaded; otherwise reproduce by your own discipline before you theorize.
 
 ## Then reason wide, not deep
 

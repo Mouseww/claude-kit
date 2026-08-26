@@ -33,11 +33,22 @@
 //   hook commands use node, not sh/ps1                         - this repo's
 //                                                                cross-platform rule
 //                                                                (see CONTRIBUTING.md)
+//   every agent `skills:` entry resolves to a repo skill or     - a typo in a skill
+//     is declared in that agent's own plugin.json                 name would load
+//     "externalSkills"                                            silently wrong, or
+//                                                                  not load at all
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { hasAgentTool, readSkillsList, bodyLinesAfterFrontmatter, findDispatchViolations } from './agent-nesting-rules.mjs';
+import {
+  hasAgentTool,
+  readSkillsList,
+  bodyLinesAfterFrontmatter,
+  findDispatchViolations,
+  findUnresolvedSkills,
+  findStaleExternalSkills,
+} from './agent-nesting-rules.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -86,6 +97,15 @@ function walk(dir, filter) {
     else if (filter(entry.name)) out.push(p);
   }
   return out;
+}
+
+// ---- repo-wide skill names ---------------------------------------------------
+// Built once, across every plugin, before any single plugin is validated: an
+// agent's `skills:` entry can legitimately name a skill that ships in a
+// different plugin than the agent's own.
+const repoSkillNames = new Set();
+for (const skillFile of walk(path.join(ROOT, 'plugins'), (n) => n === 'SKILL.md')) {
+  repoSkillNames.add(path.basename(path.dirname(skillFile)));
 }
 
 // ---- marketplace manifest ---------------------------------------------------
@@ -144,6 +164,18 @@ for (const entry of marketplace.plugins) {
   }
   if (!plugin.description) err(manifest, 'missing "description"');
   if (!plugin.version) warn(manifest, 'no "version"; bump it when the pack changes');
+
+  // "externalSkills" documents skills an agent references that are not shipped
+  // in this repo (they live in a user's global ~/.claude/skills or another
+  // marketplace). If one of those names now matches a skill that does exist
+  // in-repo, the allow-list entry is stale and should be deleted instead of
+  // shadowing the real skill.
+  for (const skillName of findStaleExternalSkills(plugin.externalSkills, repoSkillNames)) {
+    warn(
+      manifest,
+      `"externalSkills.${skillName}" is listed as external, but plugins/*/skills/${skillName}/SKILL.md exists in this repo now; remove the stale entry`
+    );
+  }
 
   // ---- hooks ----------------------------------------------------------------
   // hooks/hooks.json is loaded automatically by Claude Code. Naming it in the
@@ -234,14 +266,29 @@ for (const entry of marketplace.plugins) {
     }
     if (!fm.description) err(agent, 'frontmatter missing "description"');
 
+    const agentText = fs.readFileSync(agent, 'utf8');
+    const agentSkills = readSkillsList(agentText);
+
+    // Every skill an agent declares must be findable somewhere: shipped as
+    // plugins/*/skills/<name>/SKILL.md in this repo, or documented as a
+    // deliberate external dependency in the agent's own plugin.json. Without
+    // this check a typo'd skill name (or one that only exists in a user's
+    // personal ~/.claude/skills) passes CI silently and just never loads.
+    for (const skillName of findUnresolvedSkills(agentSkills, repoSkillNames, plugin.externalSkills)) {
+      err(
+        agent,
+        `declares skill "${skillName}" which is not plugins/*/skills/${skillName}/SKILL.md in this repo and is not listed in ${path.basename(dir)}/.claude-plugin/plugin.json "externalSkills"`
+      );
+    }
+
     // An agent granted the Agent tool can spawn nested subagents. The
     // nesting-discipline skill is what restricts those nested calls to
     // quick-read/quick-io; an Agent-tool agent without it has no guardrail
     // against nesting a full role agent, which blocks the parent for the
     // nested child's entire duration.
     if (hasAgentTool(fm.tools)) {
-      const text = fs.readFileSync(agent, 'utf8');
-      const skills = readSkillsList(text);
+      const text = agentText;
+      const skills = agentSkills;
       if (!skills.includes('nesting-discipline')) {
         err(agent, 'is granted the Agent tool but does not carry the nesting-discipline skill');
       }

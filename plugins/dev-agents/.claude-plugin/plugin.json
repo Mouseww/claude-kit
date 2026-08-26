@@ -1,7 +1,16 @@
 {
   "name": "dev-agents",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Eleven subagents with the model tier bound per role, so read-only exploration runs on haiku, real design judgement runs on opus, and a gated last resort runs on fable for a problem the opus tier has already failed to solve. Includes a delegation strategy skill that says which agent to pick and how to brief it, plus five reminder hooks: one when the main thread has been grinding alone too long, a pair that asks for a task plan before a subagent is dispatched so a long run plus context compaction cannot lose your remaining steps, one that reads what the dispatch actually returned, so an interrupted, empty or blocked subagent is not mistaken for a finished one, and one that prints the four preconditions before the last resort is allowed to cost you anything. Does NOT replace /model opusplan for getting code implementation onto a cheaper tier; see the skill.",
   "keywords": ["subagent", "delegation", "cost", "agents", "task-plan"],
-  "license": "MIT"
+  "license": "MIT",
+  "externalSkills": {
+    "security-review": "Referenced by quality-reviewer. Lives outside this repo (e.g. a user's global ~/.claude/skills or another marketplace pack), not shipped here.",
+    "api-design": "Referenced by backend-dev. Lives outside this repo (e.g. a user's global ~/.claude/skills or another marketplace pack), not shipped here.",
+    "deployment-patterns": "Referenced by devops-engineer. Lives outside this repo (e.g. a user's global ~/.claude/skills or another marketplace pack), not shipped here.",
+    "systematic-debugging": "Referenced by deepthink and last-resort. Lives outside this repo (e.g. a user's global ~/.claude/skills or another marketplace pack), not shipped here.",
+    "frontend-design": "Referenced by frontend-dev and ui-ux-designer. Lives outside this repo (e.g. a user's global ~/.claude/skills or another marketplace pack), not shipped here.",
+    "writing-plans": "Referenced by requirements-analyst. Lives outside this repo (e.g. a user's global ~/.claude/skills or another marketplace pack), not shipped here.",
+    "e2e-testing": "Referenced by test-engineer. Lives outside this repo (e.g. a user's global ~/.claude/skills or another marketplace pack), not shipped here."
+  }
 }

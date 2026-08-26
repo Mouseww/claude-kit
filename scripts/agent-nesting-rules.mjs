@@ -62,6 +62,30 @@ export function readSkillsList(text) {
   return skills;
 }
 
+// ---- check C: agent `skills:` entries must resolve somewhere ---------------
+
+/**
+ * Given the skills an agent declares, the set of skill names shipped
+ * anywhere in this repo (any plugin's plugins/*\/skills/<name>/SKILL.md), and
+ * the `externalSkills` allow-list from that agent's own plugin.json, return
+ * the declared names that resolve to neither. Those are typos or skills that
+ * only exist in a user's personal setup and were never documented as such.
+ */
+export function findUnresolvedSkills(skillNames, repoSkillNames, externalSkills = {}) {
+  return skillNames.filter(
+    (name) => !repoSkillNames.has(name) && !Object.prototype.hasOwnProperty.call(externalSkills, name)
+  );
+}
+
+/**
+ * `externalSkills` entries that now match a skill actually shipped in this
+ * repo. Those allow-list entries are stale and should be deleted rather than
+ * left to shadow the real skill.
+ */
+export function findStaleExternalSkills(externalSkills, repoSkillNames) {
+  return Object.keys(externalSkills || {}).filter((name) => repoSkillNames.has(name));
+}
+
 // ---- check B: body must not tell the agent to dispatch another role agent ---
 
 // Verb phrases that read as "send this elsewhere", case-insensitive. The

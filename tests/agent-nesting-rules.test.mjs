@@ -14,6 +14,8 @@ import {
   readSkillsList,
   bodyLinesAfterFrontmatter,
   findDispatchViolations,
+  findUnresolvedSkills,
+  findStaleExternalSkills,
 } from '../scripts/agent-nesting-rules.mjs';
 
 test('hasAgentTool: true when "Agent" is one of the comma-separated tools', () => {
@@ -85,4 +87,41 @@ test('findDispatchViolations: "hand it back to" is route-back phrasing, not flag
 test('findDispatchViolations: "back to" anywhere on the line exempts it, even with a disallowed target', () => {
   const lines = ['Route this back to `dev-agents:deepthink` if it needs a design call.'];
   assert.deepEqual(findDispatchViolations(lines, 1), []);
+});
+
+test('findUnresolvedSkills: a skill that ships in this repo resolves cleanly', () => {
+  const repoSkillNames = new Set(['nesting-discipline', 'dev-agents']);
+  assert.deepEqual(findUnresolvedSkills(['nesting-discipline'], repoSkillNames, {}), []);
+});
+
+test('findUnresolvedSkills: a skill listed in that plugin\'s externalSkills resolves cleanly', () => {
+  const repoSkillNames = new Set(['nesting-discipline']);
+  const externalSkills = { 'api-design': 'lives in the user\'s global skills' };
+  assert.deepEqual(findUnresolvedSkills(['api-design', 'nesting-discipline'], repoSkillNames, externalSkills), []);
+});
+
+test('findUnresolvedSkills: a skill neither in-repo nor in externalSkills is reported', () => {
+  const repoSkillNames = new Set(['nesting-discipline']);
+  const externalSkills = { 'api-design': 'lives in the user\'s global skills' };
+  assert.deepEqual(
+    findUnresolvedSkills(['nesting-discipline', 'totally-made-up-skill'], repoSkillNames, externalSkills),
+    ['totally-made-up-skill']
+  );
+});
+
+test('findUnresolvedSkills: with no externalSkills argument, anything not in-repo is unresolved', () => {
+  const repoSkillNames = new Set(['nesting-discipline']);
+  assert.deepEqual(findUnresolvedSkills(['some-other-skill'], repoSkillNames), ['some-other-skill']);
+});
+
+test('findStaleExternalSkills: flags an externalSkills entry that now exists in-repo', () => {
+  const repoSkillNames = new Set(['nesting-discipline', 'api-design']);
+  const externalSkills = { 'api-design': 'used to live outside the repo', 'still-external': 'genuinely external' };
+  assert.deepEqual(findStaleExternalSkills(externalSkills, repoSkillNames), ['api-design']);
+});
+
+test('findStaleExternalSkills: an empty or missing externalSkills produces no warnings', () => {
+  const repoSkillNames = new Set(['nesting-discipline']);
+  assert.deepEqual(findStaleExternalSkills({}, repoSkillNames), []);
+  assert.deepEqual(findStaleExternalSkills(undefined, repoSkillNames), []);
 });
