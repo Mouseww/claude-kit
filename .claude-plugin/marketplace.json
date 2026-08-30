@@ -7,7 +7,7 @@
   },
   "metadata": {
     "description": "Personal Claude Code capability repository",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "plugins": [
     {
@@ -44,6 +44,13 @@
       "description": "Eleven subagents with the model tier bound per role, so read-only exploration runs on haiku, real design judgement runs on opus, and a gated last resort runs on fable for a problem the opus tier has already failed to solve. Includes a delegation strategy skill that says which agent to pick and how to brief it, plus five reminder hooks: one when the main thread has been grinding alone too long, a pair that asks for a task plan before a subagent is dispatched so a long run plus context compaction cannot lose your remaining steps, one that reads what the dispatch actually returned, so an interrupted, empty or blocked subagent is not mistaken for a finished one, and one that prints the four preconditions before the last resort is allowed to cost you anything.",
       "category": "productivity",
       "tags": ["subagent", "delegation", "cost", "agents", "task-plan"]
+    },
+    {
+      "name": "rtk",
+      "source": "./plugins/rtk",
+      "description": "Rewrites verbose shell commands into compressed equivalents before they run, so `git log`, `ls -R`, `cargo test` and about a hundred others return a digest instead of a wall of text. Wraps the external `rtk` binary (Apache-2.0, single Rust executable, native Windows build) through a PreToolUse hook, and depends on that binary being on PATH, which this pack does not install for you. Deliberately does not run `rtk init -g`: upstream's installer writes its hook into your global settings.json, drops a RTK.md into ~/.claude and appends an @RTK.md reference to your global CLAUDE.md, none of which uninstall when you disable a plugin. This pack owns its own hook instead, so turning the plugin off actually turns the behavior off. Matches Bash only and never PowerShell, because rtk's rewrite rules assume POSIX command syntax. Complements context-trim rather than replacing it: rtk acts before the command runs and swaps it, context-trim acts after and truncates what is left. Every failure path in the wrapper passes the command through unchanged, so a missing or broken binary is inert rather than blocking.",
+      "category": "productivity",
+      "tags": ["rtk", "token", "shell", "compression", "hooks", "context"]
     }
   ]
 }
