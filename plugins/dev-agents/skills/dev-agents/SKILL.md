@@ -1,53 +1,40 @@
 ---
 name: dev-agents
-description: Use when a task is long or multi-step and you are deciding what to do yourself versus hand to a subagent - searching code, reading several files, running commands with verbose output, needing an independent review, or weighing several designs. Explains which of the eleven packaged agents to pick, what model tier each is bound to, how to brief one so the handoff is not a net loss, and when delegating is the wrong call. Apply it even when nobody mentioned saving tokens.
+description: Use when a task is long or multi-step and you are deciding what to do yourself versus hand to a subagent - searching code, reading several files, running commands with verbose output, needing an independent review, or weighing several designs. Routes the next action to one of eleven packaged agents with the model tier already bound, gives the pre-dispatch checklist and the brief template, and states how to tell a failed dispatch from a real result. Apply it even when nobody mentioned saving tokens.
 ---
 
 # dev-agents
 
-Eleven subagents with the model tier fixed per role, five reminder hooks, and a
-`CLAUDE.md` block.
+Eleven subagents with the model tier fixed per role. This file is the decision
+procedure: what to route where, what to check before dispatching, and how to
+tell a failed dispatch from a real one.
 
-**Read this only when you need the reasoning.** The pack's day-to-day behaviour
-comes from the `CLAUDE.md` block (`/dev-agents:sync-claude-md`), which is
-resident on every turn and carries the routing table and the write-handoff rule
-in about 3.5k characters. This document is the long-form justification behind it:
-why delegation works, when it is a net loss, and what it cannot do. Loading it
-costs roughly 3.6k tokens, so do not pull it in for a decision the block already
-answers.
+The main thread decides. Everything feeding a decision, and everything carrying
+it out, goes to a subagent.
 
-## Why delegation works
+The design record, the hook internals and their tunables are in `README.md` at
+the plugin root. You do not need them to route a task; do not load them for one.
 
-Main-thread context only grows. Every tool result — file contents, grep hits,
-build logs — stays in the history, and every later step carries all of it. A
-subagent has its own context: whatever it reads or runs inside stays inside, and
-only its final answer comes back. That is a structural reduction, not a soft
-"be more concise" suggestion that depends on the model cooperating.
+## Route the next action
 
-Delegation serves **two different goals**, and most work triggers only one:
+Look up what you are about to do. Do not deliberate over it, the table is the
+answer.
 
-1. **Keep raw output out of the main thread.** The context argument above. This
-   is about reads.
-2. **Move typing off an expensive model.** Reading costs context; writing code
-   costs time on whatever tier the main thread is running. That cost never shows
-   up in the transcript, which is exactly why it gets missed.
+| About to | Dispatch |
+|---|---|
+| Search the codebase, locate call sites, check a local convention | `quick-read` |
+| Read a file to answer one question | `quick-read` |
+| Run a command and skim its output (`git log`, a diff, a build or test log) | `quick-read` |
+| Make an edit that follows a rule you can state | `quick-io` |
+| Write out a change you have already fully decided | `quick-io`, or the role agent |
+| Weigh two approaches, review a plan or spec, root-cause a hard bug | `deepthink` |
+| Turn a vague ask into a spec | `requirements-analyst` |
+| Land a bounded chunk of one domain | the matching role agent |
+| Audit a diff | `quality-reviewer` |
 
-An earlier version of this guidance only made argument 1, with an observable
-consequence: exploration got delegated to cheap models while every line of code
-was still written by the main thread on an expensive one. See
-[Handing off writes](#handing-off-writes).
-
-## Delegation is a layer, not a phase
-
-Both arguments are about a **unit of work**, not about where you are in the task.
-A tier is chosen per read and per write, so neither argument waits for
-implementation to begin.
-
-In practice the reverse holds. Clarifying the ask, brainstorming, writing the plan
-and reviewing a design are usually where the *heaviest* reading of the whole task
-happens, because that is when you are surveying an unfamiliar codebase, checking
-conventions and locating call sites. Confining delegation to the implementation
-phase therefore leaves the largest reads sitting on the most expensive model.
+Route by unit of work, not by phase. Clarifying the ask, brainstorming and
+planning are usually where the heaviest reading of the whole task happens,
+because that is when you survey an unfamiliar codebase and locate call sites.
 
 | Stage | What gets read or written | Route to |
 |---|---|---|
@@ -58,45 +45,28 @@ phase therefore leaves the largest reads sitting on the most expensive model.
 | Implementation | A change already decided | `quick-io` or the matching role agent |
 | Verification | Test runs, build output | `test-engineer`, `devops-engineer` |
 
-The one thing that stays in the main thread at every stage is the deciding
-itself. Everything feeding into a decision, and everything carrying it out, can
-go to a subagent.
+When two agents both fit, take the lower tier: `quick-io` over a role agent, a
+role agent over `deepthink`. The cheaper one escalates if the task turns out to
+need judgement, and that escalation costs less than a wasted opus call.
 
-This is easy to lose because delegation reads like a step in a sequence, and the
-planning skills that usually run first (brainstorming, writing a plan, systematic
-debugging) each describe a stage. Those skills say what the current step is for;
-this one says which model executes each read and write inside it. They are
-orthogonal, so nothing here belongs in that sequence.
+Between the two opus agents: vague request in, structured spec out goes to
+`requirements-analyst`; proposal or plan in, verdict out goes to `deepthink`.
 
 ## The agents
 
-### Base primitives
+Installed through this plugin the ids are namespaced: `dev-agents:quick-read`,
+`dev-agents:backend-dev`, and so on.
+
+### Primitives
 
 | Agent | Model | For |
 |---|---|---|
-| `quick-read` | haiku | Read-only: search, extract, summarize, plus inspection commands (`git log`, `git diff`, reading a log). No Edit/Write |
+| `quick-read` | haiku | Read-only: search, extract, summarize, plus inspection commands. No Edit/Write |
 | `quick-io` | sonnet | Mechanical file changes that follow a rule you can state. Has Bash, so it can format, move files, and run a targeted check on what it touched |
 | `deepthink` | opus | Design judgement, trade-offs, hard diagnosis. Writes conclusions, never implements |
 
-haiku is on the read-only role rather than on `quick-io` deliberately: its error
-rate on writes is noticeably higher, and a read that goes wrong costs you a wrong
-answer rather than a damaged file. You get the cheap tier without gambling code
-quality on it. Both primitives are told to hand work back when it turns out to
-need judgement.
-
-Both have Bash, because command output — a build log, a test run, `git log` — is
-the heaviest raw output there is, and the whole point of these agents is that it
-lands in their context rather than yours. The split is what they may run:
-`quick-read` is confined to inspection commands, `quick-io` may also format,
-move files, and run a targeted check on what it just edited. Note that this
-split is enforced by their prompts, not by the tool grant — `Bash` is all or
-nothing in agent frontmatter. If you need it enforced mechanically, deny the
-commands in `permissions` rather than relying on the agent text.
-
-`deepthink` has `Write` so it can produce a design doc, ADR or analysis, but its
-guardrail is that it produces **only** those documents. It does not touch source
-or implement features. That forces it to explain the approach and hand it back,
-instead of quietly doing the implementation too.
+Both primitives hand work back when it turns out to need judgement. Take that
+handback rather than re-briefing the same agent.
 
 ### Role agents
 
@@ -112,326 +82,137 @@ For delegating a whole coherent chunk of a role, with the tier already bound.
 | `quality-reviewer` | sonnet | Reviewing a diff, severity-ranked findings, read-only |
 | `devops-engineer` | sonnet | CI/CD, containers, release scripts, migrations, rollback |
 
-Installed through this plugin the ids are namespaced: `dev-agents:quick-read`,
-`dev-agents:backend-dev`, and so on.
+Orchestrate from the main thread: `deepthink` for the approach, the role agent
+to land it, `quality-reviewer` to audit, `quick-io` for cleanup. Role agents
+carry the `Agent` tool and may push cheap sub-work down to the primitives, but
+treat that nesting as an optimization: if a nested call fails, the role agent
+finishes the work itself rather than stalling.
 
-### The last resort
+### `last-resort` (fable)
 
-| Agent | Model | For |
-|---|---|---|
-| `last-resort` | fable | A problem an opus-tier attempt has already failed to solve. Analysis document only, never implements |
-
-This one is different in kind from the other ten. They are routed by *what the
-work is*; this one is gated on *what has already been tried*. All four have to
-hold before it is worth its cost:
+Gated on what has already been tried, not on what the work is. **All four must
+hold. State each one out loud in the dispatching turn.**
 
 1. A cheaper agent genuinely attempted the problem, and you can say what it
    concluded. "It looks hard" is not an attempt.
 2. The failure is an observed behaviour, not an inference from reading code.
 3. The brief lists what was already tried and ruled out, so the dispatch does
    not re-run it.
-4. The blocker is reasoning, not missing context. If a `quick-read` could just
-   go and fetch the fact, that is the cheaper next step.
+4. The blocker is reasoning, not missing context. If a `quick-read` could go and
+   fetch the fact, that is the cheaper next step.
 
-Any one of those failing points at a cheaper action, which is why the fourth is
-in the list at all: an impasse that is really a missing file is the most common
-false positive.
+Any one of them failing points at a cheaper action. The fourth is the most
+common false positive: an impasse that is really a missing file.
 
-Its prompt tells it to attack the problem *statement* before the problem, on the
-premise that an impasse surviving an opus attempt is usually a wrong framing, an
-unchecked constraint or an inherited assumption rather than a missing technique.
-It has `Bash` specifically to reproduce the reported failure, because "the
-failure is not what it was described as" is a real and common answer. It has
-`Write` but not `Edit`, the same guardrail as `deepthink`: conclusions, never
-source.
+Its output is an analysis document. It never implements and never edits source.
 
-Two instructions in it exist to counter its own tier. It is told to say so
-plainly when the answer turns out to be small, rather than inflating to justify
-the call. And it is told to push bulk reading down to `quick-read` rather than
-spending the most expensive context in the session on file dumps.
+## Do not delegate when
 
-`gate-last-resort` (below) prints the four preconditions on every dispatch.
+- **The edit is a single line in a single file.** Latency and briefing overhead
+  outweigh the tokens saved.
+- **The work needs continuous back-and-forth with the user,** or depends on this
+  conversation. A subagent does not have it.
+- **You are creating substantial new content from scratch.** The content exists
+  only in your context, so the brief has to carry all of it. This is not the
+  same as implementing a decision already made, where the brief *is* the
+  decision and the agent supplies the volume.
+- **Each remaining edit needs a fresh judgement call.** Keep going inline. That
+  is a legitimate answer, not a failure to delegate.
 
-## When to delegate
+Delegation is not free: the subagent re-pays its system prompt plus your brief,
+and the main thread pays for the summary coming back. If writing the brief costs
+more than it saves, do it yourself. Note the asymmetry though, for an
+already-decided implementation the brief is short and the output is long, so
+this rule points the other way.
 
-Ask these about the subtask:
+## Before every dispatch
 
-- **Is it read-only and exploratory** — searching code, understanding a
-  structure, verifying a fact, with no side effect on main-thread state? Almost
-  always worth delegating, as long as what comes back is a conclusion and not a
-  dump.
-- **Will it produce a lot of verbose output** — test logs, build output, a search
-  across many files? Delegating keeps that inside the subagent.
-- **Is it a self-contained piece of a larger task** — "implement X in module Y",
-  one of several modules that could run in parallel? Its internal debugging and
-  backtracking never pollutes the main thread.
-- **Is it a verification or review step** where a fresh perspective helps, because
-  a clean context notices what an accumulated one has stopped seeing?
+Run this list. Each item has a failure it prevents.
 
-## Handing off writes
+1. **Task plan exists, if the task has more than two steps.** One task per step
+   with its expected output, marked done as you go. A spoken plan is dropped by
+   compaction while a subagent runs; a tracked one survives.
+2. **Estimate the run.** Past a few minutes, either split it into bounded
+   dispatches each with an explicit file list or one concrete question, or pass
+   `run_in_background: true` and tell the user in that same turn. A foreground
+   dispatch dies the moment the user sends the next message. Signals that a call
+   will run long: reading an entire subsystem, reviewing a full exec-plan phase,
+   or a brief saying exhaustive, very thorough, the whole codebase, one by one.
+3. **No blocking command anywhere in the brief.** A dev server, `tail -f`, a
+   file watcher, an interactive prompt, `git rebase -i`. The command never
+   returns and the agent hangs until something kills it, which from the outside
+   is indistinguishable from thinking hard. If the work needs a server, say to
+   start it detached and poll it, or hand that part to `devops-engineer`.
+4. **The brief carries the decision, not the code.** See below.
+5. **Independent parts go out in one turn,** several Agent calls in one message,
+   not one at a time round-tripping.
 
-Once you already know how the code should be written, **typing it is the
-expensive part, not deciding it.** If you are about to write a change you have
-fully worked out, hand it over instead:
+## The brief
 
-- Follows a rule you can state, or is already fully decided → `quick-io`
-- A bounded chunk of one domain → the matching role agent
+Send:
 
-**Hand over the decision, not the finished code.** The interface, the rule, the
-file list, the constraints — that is the brief. A brief containing the complete
-code costs as many tokens as writing it yourself, and that is the trap that makes
-write delegation look useless.
+- The decision: the interface, the rule, the file list, the constraint.
+- Known context: relevant paths, possibilities already ruled out, key symbol
+  names and conventions. Let it start working instead of orienting.
+- An explicit output shape: a one-line answer, a diff summary, a pass/fail.
+  Say "conclusions only, no file contents" unless the user needs the detail.
 
-This applies **mid-task**, not just at the start. You do not have to hand over a
-whole feature to hand over one implementation step. Deciding yourself and then
-passing the decision down is the intended use, not a compromise.
+Never send:
 
-When each remaining edit needs a fresh judgement call, keep going in the main
-thread. That is a legitimate answer, not a failure to delegate.
+- The finished code. A brief containing it costs as many tokens as writing it
+  yourself, and that is the trap that makes write delegation look useless.
+- A scope you have not bounded. "Look into the auth system" comes back as a
+  transcript.
 
-## When the choice is ambiguous
+Handing a write off applies **mid-task**, not only at the start. You do not have
+to hand over a whole feature to hand over one implementation step. Deciding
+yourself and passing the decision down is the intended use, not a compromise.
 
-When you are unsure which agent to use, prefer the lower-tier option: `quick-io` over a role agent, a role agent over `deepthink`. The cheaper agent will escalate if the task turns out to need more judgment, and the escalation costs less than a wrong-tier invocation that wastes an opus call on mechanical work.
-
-For the two opus agents: vague request in, structured spec out -> `requirements-analyst`. Proposal or plan in, verdict or recommendation out -> `deepthink`.
-
-## When not to delegate
-
-Not everything should go to a subagent.
-
-- **Small single-file, single-line edits.** Doing it directly is faster; the
-  latency and briefing overhead outweigh the tokens saved.
-- **Anything needing continuous back-and-forth with the user**, or depending on
-  the current conversation. A subagent loses that context.
-- **Creating substantial new content from scratch.** Writing a document or a
-  design from nothing means the content exists only in your context, so any brief
-  has to carry all of it. This differs from *implementing a decision already
-  made*, where the brief **is** the decision and the agent supplies the volume.
-
-And the one that is easiest to forget: **delegation itself costs.** The subagent
-re-pays its own system prompt plus whatever context you hand it, and the parent
-still pays for the summary coming back. For a two-file read, delegation is
-probably net negative. If writing the brief costs more than it saves, do it
-yourself. Note the asymmetry though: for an already-decided implementation the
-brief is short and the output is long, so this rule points the other way.
-
-## Briefing well
-
-A badly briefed subagent re-discovers what the main thread already knew. Those
-tokens do not hit the main thread, but they are still waste, and the result is
-worse.
-
-- **Give the known context up front**: relevant file paths, possibilities already
-  ruled out, key symbol names and conventions. Let it start working rather than
-  orienting.
-- **Ask explicitly for conclusions only** — a one-line answer, a diff summary, a
-  pass/fail — not a transcript or whole files, unless the user needs the detail.
-- **Dispatch independent parts in one turn**, several agents at once, rather than
-  one at a time round-tripping.
-- **For long multi-step tasks, build a task list first** (see below), then
-  delegate the read-heavy exploratory items one by one while the main thread does
-  decisions and integration.
-
-## Composing primitives with role agents
-
-The reliable pattern is **main-thread orchestration**: the main thread conducts —
-`deepthink` for the approach, the matching role agent to land it,
-`quality-reviewer` to audit, `quick-io` for cleanup — with the primitives
-handling cross-role odds and ends.
-
-The role agents all carry the `Agent` tool, so they can push cheap sub-work back
-down to the primitives. Treat nesting as an optimization, never the main path: if
-a nested call fails, the role agent should finish the work itself rather than
-stall. To check whether nesting actually happens in your setup, run the metrics
-report from the `context-trim` plugin.
-
-## Task lists before dispatching
-
-When a task has more than two steps, build the task list **before** dispatching
-any subagent, and mark each step done as you finish it.
-
-The failure this prevents: the main thread says in conversation "next I will do
-1, 2, 3", dispatches a subagent for step 1, and while that runs the conversation
-history gets compacted and the spoken plan is dropped. The subagent returns and
-the main thread no longer knows steps 2 and 3 exist. A tracked task list survives
-compaction; a sentence in the transcript does not.
-
-A hook pair backs this up (see below), but the rule stands on its own: the cost
-of a lost plan is redoing work, and the cost of the task list is a few seconds.
-
-## Bound the run, or background it
-
-A foreground dispatch gets killed by the user's next keystroke. This is not a
-possibility, it is the mechanism: a queued user message aborts an in-flight tool
-call, the agent side is left with `stoppedByUser: true`, and the main thread gets
-back an interrupted result. The implicit contract of a foreground dispatch is
-that the user waits quietly for it to return, and that contract only holds for a
-few minutes.
-
-So estimate the run before you dispatch. The signals that a call will run past
-five minutes: reading an entire subsystem, reviewing a full exec-plan phase, or a
-brief that says exhaustive, very thorough, the whole codebase, one by one. These
-are not hypothetical: a single fleet-evaluator audit stage ran 13 minutes, and a
-"very thorough" Explore ran 65.
-
-Anything past a few minutes has two ways out, and you take one of them. Either
-split it into multiple bounded dispatches, each with an explicit file list or one
-concrete question, or pass `run_in_background: true` and tell the user, in the
-same turn, that it is running in the background, so they know it is safe to keep
-talking. The default stays foreground (`run_in_background: false`), because the
-turn's logic depends on the return value.
-
-One brief-level rule falls out of this: **never put a blocking command in a
-brief.** A dev server, `tail -f`, a file watcher, an interactive prompt, a
-`git rebase -i`: the subagent runs it, the command never returns, and the agent
-sits there until something kills it. From the outside that is indistinguishable
-from thinking hard, which is what makes it expensive. If the work needs a server
-running, say to start it detached and poll it, or hand that part to
-`devops-engineer`, which has the pattern.
-
-## Check the return, do not assume it
+## After every dispatch, check what came back
 
 A dispatch is not finished because it returned. Four outcomes look like success
-from the main thread and are not:
+and are not.
 
-| What comes back | What it usually means |
+| What comes back | What it means |
 |---|---|
 | `Tool execution was interrupted`, or null | The user sent a message while it ran, so the call was killed |
-| An empty final message | It crashed, or ran out of turns, or had nothing it was allowed to say |
+| An empty final message | It crashed, ran out of turns, or had nothing it was allowed to say |
 | Two lines of prose with no file, symbol or number | It never got to the work: a path it could not find, a command denied by `permissions`, a scope it declined |
 | An acknowledgement from a backgrounded call | Nothing has happened yet; the result arrives later |
 
-All four are failures to act on, not progress to report. The rules:
+Then:
 
 - **Do not re-dispatch the same brief unchanged.** An interrupted brief gets
-  interrupted again; a blocked brief gets blocked again. Change the scope, supply
-  the missing path, or finish it inline.
+  interrupted again; a blocked brief gets blocked again. Change the scope,
+  supply the missing path, or finish it inline.
 - **Respond to the user first.** They stopped it, or they are waiting on
   something that silently did not happen. Say which.
 - **Never report the underlying task as done** on a result you did not receive.
-  This is the failure that actually costs the user something: a summary of work
-  that was never performed.
+  This is the failure that actually costs the user something.
 - **Treat a thin return as a question, not an answer.** Go verify the one fact
-  you need out of it, or redispatch with the missing context supplied.
+  you need, or redispatch with the missing context supplied.
 - **A backgrounded call is an ack.** Read the real output before making claims
-  about it. And unless the call actually went out with
-  `run_in_background: true`, do not close the turn by saying you will continue
-  once the agent finishes: nothing will call you back.
+  about it. And unless the call went out with `run_in_background: true`, do not
+  close the turn saying you will continue once the agent finishes. Nothing will
+  call you back.
 
-`check-subagent-return` (below) fires on the first three of these, but it is a
-reminder about one call. Noticing that a whole chain of dispatches has quietly
-produced nothing is still the main thread's job.
+Noticing that a whole chain of dispatches has quietly produced nothing is the
+main thread's job. No hook does it for you.
 
-## The hooks
+## Red flags
 
-Five hooks ship with this pack. All are reminders. None of them ever blocks a
-tool call.
+Each of these thoughts is a rationalization. The right column is what is
+actually true.
 
-### `nudge-subagent-delegation`
-
-Tracks two consecutive-operation counters in the main thread and speaks once past
-each threshold:
-
-| Streak | Default | Suggests |
-|---|---|---|
-| Consecutive Read/Grep/Glob | 16 | `quick-read` |
-| Consecutive Edit/Write | 8 | `quick-io` or a role agent |
-
-Anything else breaks both streaks, so the counts are consecutive rather than
-cumulative. The write message is phrased as a question, because a hook cannot
-tell a mechanical edit from one needing judgement, and over-nudging on writes is
-worse than on reads: a wrong handoff costs a round trip and can produce code that
-has to be redone. It never fires inside a subagent — `quick-read` reads a lot by
-design and has no `Agent` tool to act on the advice anyway.
-
-Tunables are at the top of `scripts/nudge-subagent-delegation.mjs`.
-
-### `track-task-plan` + `require-task-plan`
-
-A pair, communicating through a per-session flag file.
-
-- `track-task-plan` (PostToolUse on `TaskCreate`) records that a plan now exists.
-- `require-task-plan` (PreToolUse on `Agent`) checks for that record before a
-  subagent is dispatched, and reminds you to build a plan first if there is none.
-
-It fires on the first planless dispatch, then every third after that — enough
-pressure on genuine multi-step work without nagging a one-shot handoff. It never
-fires inside a subagent, so nested delegation is untouched. Creating a plan
-resets the counter, so if a plan is abandoned mid-session the reminder comes
-back rather than staying silenced.
-
-Set `REPEAT_EVERY = 1` at the top of `scripts/require-task-plan.mjs` to nudge on
-every planless dispatch instead.
-
-### `check-subagent-return`
-
-PostToolUse on `Agent`, the counterpart to the pair above: they fire before a
-dispatch, this one fires on what comes back. Three branches, checked in order,
-and at most one speaks per call.
-
-| Branch | Condition | Throttle |
-|---|---|---|
-| Background ack | the call went out with `run_in_background: true` | once per session |
-| Failure | `tool_response` null, a truthy `interrupted` / `stoppedByUser` / `toolDenialKind` / `is_error` / `error` flag, an interruption marker in the text, or empty text | none, every time |
-| Thin result | returned text shorter than `THIN_CHARS` (80) | first, then every third |
-
-The failure branch is deliberately unthrottled: a dispatch that did not happen
-is worth interrupting for every single time, and unlike the write-streak nudge
-there is no judgement call for it to get wrong.
-
-The reason `tool_response` is probed rather than read is that its shape is
-version dependent, the same caveat `measure-subagent.mjs` carries: it may be a
-string, an array of content blocks, an object with `.content`, or something
-else. The script extracts text from all of those and, separately, keeps the
-response object so its flags can still be inspected when no text comes out.
-
-It never fires inside a subagent. Tunables (`THIN_CHARS`, `REPEAT_EVERY`) are at
-the top of `scripts/check-subagent-return.mjs`.
-
-### `gate-last-resort`
-
-PreToolUse on `Agent`, firing only when the dispatched `subagent_type` contains
-`last-resort` (a substring test, so both the bare and the namespaced id match).
-It prints the four preconditions from
-[The last resort](#the-last-resort) and asks for them to be confirmed out loud in
-that turn.
-
-Deliberately **unthrottled and stateless**, unlike `require-task-plan`. That hook
-throttles because a planless dispatch is common and nagging it is worse than
-missing one. This dispatch is rare by definition and the most expensive mistake
-the pack can make, so it gets the full checklist every single time and keeps no
-flag file to go stale.
-
-## The honest limit: this does not control the main thread's model
-
-`/model opusplan` has opus plan and then **the platform switches to sonnet to
-execute**. That switch is done by the platform, not by the model choosing to
-cooperate, which makes it the most reliable way to get execution and file writes
-onto a cheap tier.
-
-The boundary matters. The seven sonnet role agents genuinely run on sonnet once
-invoked, because the tier in their frontmatter is a hard guarantee. But **nothing
-stops the main thread from using its own Edit/Write**, and the main thread runs
-on whatever model is active. The write-streak nudge and the
-[Handing off writes](#handing-off-writes) section above both point at this, but
-they are reminders, not enforcement.
-
-So the two are complementary: subagents cover work that delegation moves,
-`opusplan` covers everything else. This plugin does not replace it.
-
-## Is any of this actually paying off?
-
-Install the `context-trim` plugin alongside this one. Its `measure-subagent` hook
-logs every subagent call — agent name, characters returned, duration, and real
-token usage from the Agent tool's telemetry — and its report answers three things
-that are otherwise invisible:
-
-1. Which agents never get used. Zero invocations after a week is dead weight in
-   the always-resident agent list; delete it.
-2. How much context each delegation hands back. An agent routinely returning
-   4000+ characters is not distilling anything, so that delegation is close to
-   net zero.
-3. Whether role agents delegate down at all.
-
-The central assumption here — that delegating beats reading inline — can be
-wrong for your workload. Measure it rather than trusting the theory.
+| Thought | Reality |
+|---|---|
+| "Reading these two files myself is cheaper than briefing" | Two is a guess. Count them. Past three the brief wins. |
+| "Let me explore a bit first, then decide who to hand it to" | Exploring is the `quick-read` job. You need its conclusion, not its transcript. |
+| "I will start delegating once implementation begins" | Planning reads more than implementing does. The largest reads are already behind you. |
+| "This edit is small" | Small describes the diff, not the reading that produced it. |
+| "I already know what to write, so writing it is fast" | Fast on the clock, expensive on the tier. That cost never appears in the transcript, which is why it gets missed. |
+| "I will paste the code into the brief so it cannot get it wrong" | Then you paid to write it anyway. Send the interface, the rule, the file list. |
+| "The agent returned, so the step is done" | Four kinds of failure look like a return. Check it. |
+| "It came back thin, I will just redispatch" | The same brief fails the same way. Change the scope or supply what was missing. |
+| "I will tell the user I will continue once it finishes" | Only true if it went out backgrounded. Otherwise nothing calls you back. |
+| "A cheap agent would not get this right" | Say what a cheap agent actually concluded first. Until then that is a prediction, not a result. |

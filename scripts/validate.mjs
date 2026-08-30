@@ -105,7 +105,12 @@ function walk(dir, filter) {
 // different plugin than the agent's own.
 const repoSkillNames = new Set();
 for (const skillFile of walk(path.join(ROOT, 'plugins'), (n) => n === 'SKILL.md')) {
-  repoSkillNames.add(path.basename(path.dirname(skillFile)));
+  const skillName = path.basename(path.dirname(skillFile));
+  repoSkillNames.add(skillName);
+  // Also index the "plugin:skill" namespaced form, so a cross-pack reference
+  // like "dev-agents:dev-agents" resolves the same way a bare name does.
+  const pluginName = path.basename(path.dirname(path.dirname(path.dirname(skillFile))));
+  repoSkillNames.add(`${pluginName}:${skillName}`);
 }
 
 // ---- marketplace manifest ---------------------------------------------------
@@ -250,6 +255,19 @@ for (const entry of marketplace.plugins) {
     if (!fm.description) err(skill, 'frontmatter missing "description"');
     else if (fm.description.length < 40) {
       warn(skill, 'description is very short; it is what the model reads to decide relevance');
+    }
+
+    // A skill can declare its own `skills:` list (a sibling or cross-pack
+    // dependency). Those entries must resolve the same way an agent's
+    // `skills:` entries do, via the same helper, or a typo/rename ships
+    // silently and only fails at runtime.
+    const skillText = fs.readFileSync(skill, 'utf8');
+    const skillSkills = readSkillsList(skillText);
+    for (const skillName of findUnresolvedSkills(skillSkills, repoSkillNames, plugin.externalSkills)) {
+      err(
+        skill,
+        `declares skill "${skillName}" which is not plugins/*/skills/${skillName}/SKILL.md in this repo and is not listed in ${path.basename(dir)}/.claude-plugin/plugin.json "externalSkills"`
+      );
     }
   }
 
