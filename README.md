@@ -2,9 +2,10 @@
 
 Five Claude Code plugins that keep a long session cheap: subagents with the model
 tier already bound per role, automatic truncation of verbose command output, answers
-that name the real file instead of a stand-in label, a code graph that answers "who
-calls this" without a grep sweep, and a pack that manages this repository from
-inside Claude.
+that name the real file instead of a stand-in label and lead with the conclusion
+instead of a noun stack or filler, a code graph that answers "who calls this"
+without a grep sweep, and a pack that manages this repository from inside
+Claude.
 
 Every hook and script is a single `.mjs`, so macOS, Linux and native Windows run
 identical code. `node` on `PATH` is the only requirement.
@@ -114,7 +115,7 @@ Restart after that and the daily check takes over.
 | Verbose output | A failing build or test log comes back truncated behind a `[context-trim: ...]` header, with the error lines and the final verdict kept. Clean output is left whole unless it is very large |
 | Delegation | Claude picks a subagent by its description, already bound to the right model tier |
 | Reminders | Five hooks nudge you after a long solo stretch, when dispatching with no task plan, when a dispatch comes back interrupted, empty or suspiciously thin, and when the fable-tier last resort is about to be called. None of them ever blocks a call |
-| Reporting | Answers name real paths, symbols and commands instead of stand-in labels like `$1.1` or shape-words like "improved robustness" |
+| Reporting | Answers name real paths, symbols and commands instead of stand-in labels like `$1.1` or shape-words like "improved robustness", lead with the conclusion, and recommend instead of listing options |
 | Metrics | Every subagent call is logged to `~/.claude/context-offload-metrics.jsonl` |
 
 **To be explicit, name what you want in plain language:**
@@ -129,7 +130,7 @@ hand the migration to dev-agents:devops-engineer
 | Command | Does |
 |---|---|
 | `/dev-agents:sync-claude-md` | Install or refresh the resident delegation block |
-| `/concrete-answers:sync-claude-md` | Install or refresh the resident reporting block |
+| `/concrete-answers:sync-claude-md` | Install or refresh the resident reporting and writing-style block |
 | `/code-graph:setup` | Check for the `code-review-graph` CLI, install it if missing, and build the initial graph |
 | `/code-graph:refresh` | Incrementally update the graph on demand, instead of on every edit |
 | `/claude-kit-meta:list` | Show the packs and what each one ships |
@@ -307,7 +308,7 @@ An edit here reaches nobody until the version moves. Bump the pack's `version` i
 
 ```bash
 node scripts/validate.mjs                                        # structure
-node --test "plugins/**/tests/*.test.mjs" "tests/*.test.mjs"     # 181 tests
+node --test "plugins/**/tests/*.test.mjs" "tests/*.test.mjs"     # 187 tests
 ```
 
 Both run in CI on Linux and Windows for every push. Run the validator even for a

@@ -1,14 +1,28 @@
 ---
 name: concrete-answers
-description: Use when writing a report, summary, status update, plan or completion claim for the user, or when relaying what a subagent returned, and you notice the wording could be about any project rather than this one. Explains why answers drift into stand-in labels like `$1.1` and shape-words like "improved robustness", the one test that catches both, why being specific must not make the answer longer, what to do when the specifics genuinely are not available, and where abstraction is legitimate.
+description: Use when writing a report, summary, status update, plan, design doc or completion claim for the user, or when relaying what a subagent returned, and the wording could be about any project rather than this one, or reads like something nobody would say out loud. Covers both halves of the pack: why answers drift into stand-in labels like `$1.1` and shape-words like "improved robustness", and why they drift into noun stacks, menus of options, buried bad news and closing paragraphs that repeat the body. Carries the jargon-translation table, the consequence rule, and the pre-send checklist.
 ---
 
 # concrete-answers
 
 **Read this only when you need the reasoning.** The day-to-day behaviour comes
 from the `CLAUDE.md` block (`/concrete-answers:sync-claude-md`), which is
-resident on every turn and carries the five rules in about 1.6k characters. This
+resident on every turn and carries twelve rules in about 3.4k characters. This
 document is the justification behind them.
+
+The block has two halves and they answer different questions. The first four
+rules decide **what you say**: name a real path, a real symbol, a real command,
+and cut the labels and shape-words that survive being pasted into any other
+repository. The rest decide **how the answer is built**: what goes in the first
+sentence, whether a line is a verb or a pile of nouns, whether a number was
+counted or guessed, and what never appears at all. Both halves fail the same
+way, which is why they ship as one pack: the reader ends up holding text they
+cannot check or cannot act on.
+
+That second half doubled the block, from about 1.6k characters to about 3.4k,
+roughly 475 extra tokens on every request. That was a deliberate trade made on
+2026-08-29, not drift. The reasoning: a style rule that only fires when a skill
+is invoked fires after the answer is already written.
 
 The block deliberately keeps every *sample* (the banned labels, the banned
 shape-words, the before/after pair) and pushes every *rationale* here. Samples
@@ -163,6 +177,133 @@ around the gap with a shape-word. Two acceptable options:
 What is never acceptable is presenting a summary as a report. If a subagent's
 answer has no file, symbol, count or command in it, that answer is not evidence
 yet.
+
+## The second half: what a checkable sentence is not enough for
+
+The four naming rules get the reader a sentence they can verify. They do not get
+them a document they can use. A report can be fully anchored and still be
+unreadable, because the failures are different:
+
+| Failure | What the reader is left holding |
+|---|---|
+| Noun stack | A list of topics, with no way to tell what happens or who does it |
+| Buried conclusion | Three paragraphs of build-up before the one sentence that mattered |
+| Softened bad news | A plan they approve, because the blocker was phrased as "有一些影响" |
+| Menu of options | The decision handed back to them, unmade, plus the work of comparing |
+| Unlabelled estimate | An estimate they will plan against as if it were measured |
+| Closing summary | A body they now have to re-read to find out whether the ending added anything |
+
+The single test in the block ("would you say this sentence out loud to a
+colleague standing next to you?") catches all six, because none of them survive
+being spoken. Nobody says "身份桥；发起运行；状态映射" to a person's face; they
+say "把操作员的登录身份换成 ORCH 认的令牌". The project-identity test earlier in
+this document and the out-loud test are the same test aimed at different halves:
+one asks whether the sentence is about *this* project, the other asks whether it
+is a sentence a person would utter.
+
+## Every item carries its consequence
+
+Do not just say what happens. Say what breaks if it does not.
+
+> 全部文件到齐了才把案件改成待复核。**不然操作员点进去会看到一个空案件。**
+
+> 这个查询只读本地表，不去问 ORCH。**否则 ORCH 一挂，任务列表也打不开。**
+
+The second half is what lets the reader judge whether the item can be cut.
+Without it they have to trust you, and trust is not reviewable. This is the rule
+that turns a plan from a list of things you intend to do into a list of things
+they can approve, defer or delete one by one.
+
+It applies hardest to lists, which is where consequence goes missing first. A
+bullet is short enough to look complete without one.
+
+## Translate the term, or drop it
+
+Use the jargon word only when the reader already lives in it. Otherwise say the
+thing.
+
+| Instead of | Write |
+|---|---|
+| 支持 Idempotency-Key | 带一个唯一编号，请求超时重试时不会重复跑第二遍 |
+| 身份桥 | 把操作员的登录身份换成对方系统认的令牌 |
+| 异步回调契约 | 先回一句还在算，算完再把结果推回去 |
+| outbox 模式 | 一个保证消息不丢的机制。这个仓库里没有现成的 |
+
+Real system names, table names, file paths and symbols stay as they are. They
+are names, not jargon, and replacing one with a description is the naming rule's
+failure mode, not a translation. `require-task-plan.mjs` stays
+`require-task-plan.mjs`; "the idempotency mechanism" becomes what it does.
+
+The test for which one you are looking at: a name resolves to exactly one thing
+the reader can open. A jargon term resolves to a concept they either know or do
+not.
+
+## Name what you do not know, and what being wrong would cost
+
+Uncertainty is information. Bury it and the reader plans as if it were
+certainty.
+
+> 如果案件以上游系统为准，集成服务写状态的地方要全部换掉，第一项会有一部分白做。
+
+The pattern is **如果 X，那么 Y 要重做**, with Y named. "可能会有一些影响" fails
+twice over: it hedges, and it does not say what the impact lands on, so the
+reader cannot price it or plan around it.
+
+This is the same rule as flagging inference inside a sentence, one level up. At
+sentence level you mark the claim you have not verified. At document level you
+mark the assumption the whole document rests on, and say what has to be redone
+if it turns out false.
+
+## Correct yourself in one sentence, then keep moving
+
+Quantify the impact instead of apologizing for it. No self-flagellation, no
+listing of past mistakes, no promises to do better.
+
+Not this:
+
+> 非常抱歉，我在上一版中疏忽了设计时间这一重要因素，这完全是我的失误，我本应该在最初
+> 规划时就考虑到这一点，感谢您的指正...
+
+This:
+
+> 之前只把设计时间算进了容量，没在日历上留窗口。这是漏项。重叠着做多 1 周，串行做多
+> 3 到 4 周。
+
+Agreeing with a correction takes one clause, not a paragraph. The apology
+version is worse than useless: it costs the reader a paragraph to learn nothing
+about the schedule, and it buries the two numbers they actually needed.
+
+## Lists of complete sentences
+
+Prefer a list to a paragraph. But each item is a sentence that stands on its
+own, not a fragment. A list of noun fragments is the noun-stack rule with
+bullets in front of it, and the bullets make it look organized, which is worse.
+
+A paragraph is right when the ideas genuinely connect and the connection is the
+point. Three or more sequential facts is a list.
+
+## Surface what the reader did not ask but needs
+
+When the work turns up something that changes their decision, say it, briefly,
+at the top.
+
+> 核实后确认这是设计文档没列出的第五个缺口，已计入第一项。
+
+State it, size it, move on. Do not expand it into a lecture, and do not save it
+for the end where it reads as an afterthought. The reason it goes at the top is
+the same reason bad news does: they may stop reading, and this is the part they
+cannot afford to miss.
+
+## Before sending
+
+- [ ] First sentence contains the conclusion, not the preamble.
+- [ ] No line is a stack of nouns with no verb.
+- [ ] Every claim that matters says whether it was measured or estimated.
+- [ ] Every risk names what specifically has to be redone if it lands.
+- [ ] Bad news is in the first third, in plain words.
+- [ ] Nothing is repeated in a closing paragraph.
+- [ ] Every jargon term is either translated in place or replaced.
+- [ ] Every anchor is a name you saw this session, not one you reconstructed.
 
 ## Relation to the dev-agents pack
 

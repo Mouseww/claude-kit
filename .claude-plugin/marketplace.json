@@ -27,9 +27,9 @@
     {
       "name": "concrete-answers",
       "source": "./plugins/concrete-answers",
-      "description": "Forces every answer to name the real thing: a file path with a line, a symbol, the command that was actually run, a business entity, a module that exists in this repo. Bans stand-in labels the user never wrote ($1.1, \"step 2\", \"the module in question\") and the filler abstractions that read like a report but cannot be checked (\"optimized the logic\", \"improved robustness\"). Applies to relayed subagent summaries too: a summary with no file, symbol or number in it is not evidence and does not get forwarded. One resident CLAUDE.md block, one skill for the reasoning, no hooks.",
+      "description": "Forces every answer to name the real thing: a file path with a line, a symbol, the command that was actually run, a business entity, a module that exists in this repo. Bans stand-in labels the user never wrote ($1.1, \"step 2\", \"the module in question\") and the filler abstractions that read like a report but cannot be checked (\"optimized the logic\", \"improved robustness\"). Also governs how the answer is built: conclusion first and bad news first, verbs instead of stacked nouns, a stated measured-or-estimated qualifier on every number, a recommendation instead of a menu, and a banned list of emoji, exclamation marks and content-free openers. Applies to relayed subagent summaries too: a summary with no file, symbol or number in it is not evidence and does not get forwarded. One resident CLAUDE.md block, one skill for the reasoning, no hooks.",
       "category": "productivity",
-      "tags": ["communication", "reporting", "clarity", "verifiability"]
+      "tags": ["communication", "reporting", "clarity", "verifiability", "writing-style", "structure"]
     },
     {
       "name": "context-trim",

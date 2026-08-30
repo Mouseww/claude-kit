@@ -1,5 +1,5 @@
 ---
-description: Install or update the concrete-answers reporting block in a CLAUDE.md
+description: Install or update the concrete-answers reporting and writing-style block in a CLAUDE.md
 argument-hint: "user | project | <path to CLAUDE.md>"
 allowed-tools: Bash(node:*), Read
 ---
@@ -8,8 +8,8 @@ Install or update the always-resident reporting block in a `CLAUDE.md`.
 
 Target (default `project` if empty): `$ARGUMENTS`
 
-Why this exists: the rule this pack enforces has to apply to every answer, and a
-skill body only enters context when the skill is invoked. So the four rules live
+Why this exists: the rules this pack enforces have to apply to every answer, and a
+skill body only enters context when the skill is invoked. So the twelve rules live
 in the block, which is resident on every turn, and the reasoning stays in the
 `concrete-answers` skill.
 
