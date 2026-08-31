@@ -194,6 +194,41 @@ missing one. This dispatch is rare by definition and the most expensive mistake
 the pack can make, so it gets the full checklist every single time and keeps no
 flag file to go stale.
 
+### `nudge-content-fetch`
+
+PreToolUse on `Bash|PowerShell`, 5s. Reads `tool_input.command` before the
+command runs and, if it is a command whose whole purpose is to pull content
+into context, says so once. It never denies and never touches output.
+
+Six categories in two deliberately unmerged shapes:
+
+| Shape | Categories | What it says |
+|---|---|---|
+| Tool precedence | `read-file`, `search`, `list-files`, `web-fetch` | a dedicated tool does this without a shell: Read with `offset`/`limit`, Grep with `head_limit`, Glob, WebFetch |
+| Narrow at source | `git-content`, `log-query` | no tool replaces `git diff` or `docker logs`, so add `--stat`, `-- <path>`, `--tail=N`, a SQL `LIMIT`, a real jq filter |
+
+Throttled per category per session via a flag file under the temp dir, so a
+session sees at most six of these. Exemptions are deliberately permissive and
+kill the check entirely: heredoc writes, output redirected to a file, a pipe
+into `head`/`tail`/`wc`/`grep`/`Select-Object -First`, a command already
+carrying `-n`/`--tail`/`--stat`/`--oneline`/`LIMIT`, and `git log -p` with an
+explicit path. It would rather miss a real case than nag a command that is
+already narrow.
+
+This is the only hook in the pack that can stop the cost from happening at all.
+It used to justify itself by pointing at context-trim's truncation, and that
+rationale expired in context-trim 1.3.0: clean output now passes through intact
+below 30000 characters, precisely because cutting a result the model went and
+fetched is what makes it fetch the result again. So the split is now clean, this
+hook is the pre-emptive half and context-trim's advice path is the post-hoc half
+that only fires when the output really did come back large.
+
+Note the overlap if you also run the `rtk` pack: both sit on PreToolUse and both
+watch `cat`/`grep`/`find`/`git`. They do different things. rtk swaps the command
+for one that prints less; this hook argues for a tool that reads less in the
+first place. Running both is fine, and `Read` with an `offset` still beats a
+compressed dump of the whole file.
+
 ## The honest limit: this does not control the main thread's model
 
 `/model opusplan` has opus plan and then **the platform switches to sonnet to
