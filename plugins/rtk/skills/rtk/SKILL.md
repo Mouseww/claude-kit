@@ -7,7 +7,7 @@ description: Explains what the rtk pack rewrites before a Bash command runs, whe
 
 This pack wires the external `rtk` binary into a **PreToolUse** hook. Before a
 `Bash` command runs, `rtk hook claude` gets a chance to rewrite it into a
-cheaper equivalent — `git log` becomes a digest, `ls -R` becomes a summarized
+cheaper equivalent. `git log` becomes a digest, `ls -R` becomes a summarized
 tree, `cargo test` becomes a pass/fail roll-up instead of thousands of lines.
 
 The rewrite happens **before execution**. You are not reading a truncated
@@ -29,9 +29,14 @@ wrong whenever you actually need the literal bytes:
   already thrown away what you needed.
 - **Anything whose output you will parse.** Scripts and `--porcelain`/`--json`
   invocations exist to be machine-read. A rewritten version may not be.
-- **Verifying a claim.** If you are checking whether something is true — a file
-  exists, a test really passed, a string is absent — a summary is evidence of
-  the summarizer's opinion, not of the fact.
+- **Verifying a claim.** If you are checking whether something is true, say that
+  a file exists, that a test really passed, or that a string is absent, a
+  summary is evidence of the summarizer's opinion, not of the fact.
+- **A command carrying a secret.** rtk reads the whole command line before it
+  runs, so a token, password or connection string sitting on that line passes
+  through its process. Upstream's `SECURITY.md` flags the SQLite work in
+  `src/tracking.rs` as a privacy concern without documenting what it stores or
+  whether anything leaves the machine. Bypass rather than find out.
 
 To bypass it for a single call, set the escape hatch in the command itself:
 
@@ -44,7 +49,7 @@ turns the rewrite off for that one invocation without touching config.
 
 To turn it off for the session, disable the `rtk` plugin. Because this pack
 owns its own hook rather than using upstream's global installer, disabling the
-plugin genuinely disables the behavior — there is nothing left behind in
+plugin genuinely disables the behavior, because there is nothing left behind in
 `~/.claude/settings.json` to keep firing.
 
 ## Division of labor with context-trim
@@ -58,7 +63,7 @@ and neither replaces the other:
 | `context-trim` | PostToolUse, after output exists | truncates output that is already huge or failing |
 
 Running both is fine and is the intended configuration. rtk removes the bulk,
-and `truncate-verbose-output.mjs` still catches whatever slips through — a
+and `truncate-verbose-output.mjs` still catches whatever slips through, such as a
 command rtk has no rule for, or output that is large for reasons rtk could not
 predict. The `measure-subagent.mjs` half of context-trim tracks subagent cost
 and has nothing to do with rtk at all.
@@ -82,7 +87,7 @@ Three reasons:
 ## Failure behavior
 
 Every failure path in `scripts/rtk-rewrite.mjs` passes the command through
-unchanged. Missing binary, spawn error, timeout, malformed output from rtk — all
+unchanged. Missing binary, spawn error, timeout, malformed output from rtk: all
 of them produce empty stdout, which Claude Code reads as "no opinion, run it as
 written." The wrapper never emits a `deny`. If rtk is not installed, the plugin
 is inert rather than broken, and it stays silent rather than warning on every

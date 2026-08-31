@@ -14,7 +14,7 @@ Steps:
    version, skip to step 4.
 
 2. **Do not run `cargo install rtk`.** The crate named `rtk` on crates.io is a
-   different, unrelated project — `reachingforthejack/rtk`, "Rust Type Kit",
+   different, unrelated project: `reachingforthejack/rtk`, "Rust Type Kit",
    stuck at v0.1.0. Upstream's `Cargo.toml` declares the package name `rtk` but
    the binary this pack wants has never been published to crates.io under that
    name, so `cargo install rtk` silently installs the wrong tool and every
@@ -24,15 +24,16 @@ Steps:
 3. Install it. Pick by platform:
 
    **Windows** (this is the case that matters here, and upstream's `INSTALL.md`
-   has no Windows section at all — the asset does exist, it is just
-   undocumented). Download the prebuilt binary from the release assets:
+   has no Windows section at all, even though the release does ship the asset;
+   it is simply undocumented). Download the prebuilt binary from the release
+   assets:
 
    ```
    rtk-x86_64-pc-windows-msvc.zip
    ```
 
    from `https://github.com/rtk-ai/rtk/releases/latest`, unzip it, and put
-   `rtk.exe` somewhere already on `PATH` — `C:\Users\<you>\.local\bin` is the
+   `rtk.exe` somewhere already on `PATH`. `C:\Users\<you>\.local\bin` is the
    convention this machine already uses (`code-review-graph.exe` lives there).
    No Rust toolchain is required, and none is installed here.
 
@@ -46,6 +47,22 @@ Steps:
    step 2. Homebrew and upstream's `install.sh` are also options on those
    platforms, but `install.sh` is a `curl | sh` pipe, so read it first if that
    matters to you.
+
+   **Verify the download before unzipping it.** The release ships a
+   `checksums.txt`. At v0.46.0 the Windows zip is
+   `9bc5acd54d35a916e4a561435963e0acf2f1a0115cf43dcfe2b719f361c8a970`, checked
+   against that file. Compare with:
+
+   ```
+   Get-FileHash rtk-x86_64-pc-windows-msvc.zip -Algorithm SHA256
+   ```
+
+   Be clear about what that buys. It catches a corrupted or tampered download.
+   It does not catch a compromised upstream account, because `checksums.txt`
+   sits in the same release and the same credentials can replace both. There is
+   no stronger guarantee available: the assets carry no `.sig` or `.asc`, the
+   release workflow runs no cosign or sigstore step, and GitHub's attestation
+   API returns 404 for this binary. Verified at v0.46.0.
 
 4. **Do not run `rtk init -g`.** That is upstream's own installer. It writes
    rtk's hook into your **global** `~/.claude/settings.json`, drops a
@@ -72,18 +89,18 @@ Steps:
    ```
 
    The second should return the raw, unrewritten output. If both return the same
-   thing, the hook is not firing at all — check that the plugin is enabled and
+   thing, the hook is not firing at all. Check that the plugin is enabled and
    that Claude Code was restarted.
 
 6. If `rtk` is not installed, the plugin is **inert, not broken**.
    `scripts/rtk-rewrite.mjs` probes `PATH` and exits silently when the binary is
-   absent, deliberately without writing to stderr — a warning on every single
+   absent, deliberately without writing to stderr, because a warning on every single
    Bash call would be worse than the feature being off. So "I enabled it and
    nothing changed" is the expected symptom of a missing binary, not a bug.
    Re-run step 1 to tell the two apart.
 
 7. Configuration lives in `~/.config/rtk/config.toml` (`exclude_commands` is the
    key for carving out commands rtk should leave alone). This is **global to
-   rtk**, not per-project — upstream's hook has no project-local config path. If
+   rtk**, not per-project. Upstream's hook has no project-local config path. If
    you need a per-repo exception, the escape hatch in step 5 is the mechanism,
    not the config file.
