@@ -72,6 +72,7 @@ if (!fs.existsSync(LOG)) {
 }
 
 const { rows: records, skipped: malformed } = parseMetricsLines(fs.readFileSync(LOG, 'utf8'));
+const oversized = records.filter((r) => r.oversized === true).length;
 
 console.log(`Metrics log: ${LOG}`);
 console.log(
@@ -301,6 +302,9 @@ console.log(
 
 if (malformed > 0) {
   console.log(`note: skipped ${malformed} malformed log line(s)`);
+}
+if (oversized > 0) {
+  console.log(`note: ${oversized} oversized record(s) written as markers`);
 }
 }
 

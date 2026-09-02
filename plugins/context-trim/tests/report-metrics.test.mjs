@@ -196,3 +196,28 @@ test('a torn JSONL line is skipped instead of crashing the report', () => {
   assert.equal(parsed.rows.length, 2, 'both intact rows should survive');
   assert.equal(parsed.skipped, 1, 'the torn line should be counted, not thrown');
 });
+
+test('an oversized-record marker parses as a normal row, not as malformed', () => {
+  const rows = [
+    JSON.stringify({ oversized: true, orig_bytes: 5027, event: 'agent_usage', session: 's1' }),
+    JSON.stringify({ event: 'stop', agent: 'dev-agents:quick-read', duration_s: 5 }),
+  ].join('\n');
+  const parsed = parseMetricsLines(rows);
+  assert.equal(parsed.skipped, 0, 'a marker is valid JSON and must not be counted as malformed');
+  assert.equal(parsed.rows.length, 2);
+  assert.equal(parsed.rows[0].oversized, true);
+  assert.equal(parsed.rows[0].orig_bytes, 5027);
+});
+
+test('an oversized marker in the log produces the oversized-record note; a clean log does not', () => {
+  const withMarker = run([
+    { ts: ts(), event: 'stop', agent: 'dev-agents:quick-read', agent_id: 'a1', duration_s: 5, returned_chars: 100 },
+    { oversized: true, orig_bytes: 5027, event: 'agent_usage', session: 's1' },
+  ]);
+  assert.match(withMarker, /note: 1 oversized record\(s\) written as markers/);
+
+  const clean = run([
+    { ts: ts(), event: 'stop', agent: 'dev-agents:quick-read', agent_id: 'a1', duration_s: 5, returned_chars: 100 },
+  ]);
+  assert.doesNotMatch(clean, /oversized record/);
+});

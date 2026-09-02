@@ -133,18 +133,32 @@ function quiet(fn) {
 // --- shared:appendJsonl --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
 // One write call, one line, capped. An O_APPEND write is atomic only below
 // PIPE_BUF (4096), so a record larger than the cap could interleave with
-// another process's append and produce a line neither of them wrote. Dropping
-// an oversized telemetry record is strictly better than corrupting the log,
-// and parseMetricsLines in report-metrics.mjs skips whatever slips through.
+// another process's append and produce a line neither of them wrote. Rather
+// than drop an oversized record silently, write a marker in its place: the
+// record is still lost, but the report can say so. Records here are normally
+// small fixed-field scalars; the one that can grow without bound is the usage
+// object, whose shape depends on the SDK version.
 const JSONL_MAX_BYTES = 4000;
 function appendJsonl(file, record) {
   return (
     quiet(() => {
       const line = JSON.stringify(record) + '\n';
-      if (Buffer.byteLength(line, 'utf8') > JSONL_MAX_BYTES) return false;
+      const size = Buffer.byteLength(line, 'utf8');
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.appendFileSync(file, line);
-      return true;
+      if (size <= JSONL_MAX_BYTES) {
+        fs.appendFileSync(file, line);
+        return true;
+      }
+      // Carry only small scalars through, so the marker itself cannot be
+      // oversized in turn.
+      const marker = { oversized: true, orig_bytes: size };
+      for (const key of ['event', 'agent', 'session']) {
+        const v = record?.[key];
+        if (typeof v === 'string' && v.length <= 200) marker[key] = v;
+        else if (typeof v === 'number') marker[key] = v;
+      }
+      fs.appendFileSync(file, JSON.stringify(marker) + '\n');
+      return false;
     }) ?? false
   );
 }
