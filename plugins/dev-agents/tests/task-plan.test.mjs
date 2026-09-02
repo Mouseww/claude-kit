@@ -35,6 +35,8 @@ afterEach(() => {
       `nudged-${id}.count`,
       `bg-warned-${id}.flag`,
       `unbounded-warned-${id}.flag`,
+      `plan-${id}.json`,
+      `plan-echoed-${id}.count`,
     ]) {
       try {
         fs.unlinkSync(path.join(STATE_DIR, f));
@@ -225,4 +227,60 @@ test('unparseable stdin is ignored by both hooks', () => {
     assert.equal(p.status, 0);
     assert.equal((p.stdout || '').trim(), '');
   }
+});
+
+test('an existing plan has its remaining steps echoed back on dispatch', () => {
+  const s = newSession('echo-remaining');
+  run(TRACK, {
+    tool_name: 'TaskCreate',
+    session_id: s,
+    hook_event_name: 'PostToolUse',
+    tool_input: {
+      todos: [
+        { content: 'finished already', status: 'completed' },
+        { content: 'still to do', status: 'pending' },
+      ],
+    },
+  });
+  const out = dispatch(s);
+  assert.ok(out, 'expected the remaining-steps reminder');
+  assert.match(out.hookSpecificOutput.additionalContext, /still to do/);
+  assert.doesNotMatch(out.hookSpecificOutput.additionalContext, /finished already/);
+});
+
+test('a plan whose steps are all done produces no remaining-steps reminder', () => {
+  const s = newSession('all-done');
+  run(TRACK, {
+    tool_name: 'TaskCreate',
+    session_id: s,
+    hook_event_name: 'PostToolUse',
+    tool_input: { todos: [{ content: 'the only step', status: 'completed' }] },
+  });
+  assert.equal(dispatch(s), null);
+});
+
+test('a plan created with an unrecognized payload shape still sets the flag', () => {
+  const s = newSession('unknown-shape');
+  run(TRACK, {
+    tool_name: 'TaskCreate',
+    session_id: s,
+    hook_event_name: 'PostToolUse',
+    tool_input: { mystery: 'shape' },
+  });
+  assert.ok(fs.existsSync(flagFor(s)), 'the existence flag must not depend on parsing the payload');
+  // No steps were extractable, so there is nothing to echo and the hook is silent.
+  assert.equal(dispatch(s), null);
+});
+
+test('TodoWrite also creates the plan record', () => {
+  const s = newSession('todowrite');
+  run(TRACK, {
+    tool_name: 'TodoWrite',
+    session_id: s,
+    hook_event_name: 'PostToolUse',
+    tool_input: { todos: [{ content: 'via todowrite', status: 'pending' }] },
+  });
+  assert.ok(fs.existsSync(flagFor(s)));
+  const out = dispatch(s);
+  assert.match(out.hookSpecificOutput.additionalContext, /via todowrite/);
 });

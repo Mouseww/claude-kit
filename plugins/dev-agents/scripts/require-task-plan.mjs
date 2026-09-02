@@ -39,6 +39,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { readPlan, formatRemaining } from './plan-store.mjs';
 
 // ---- tunables --------------------------------------------------------------
 const REPEAT_EVERY = 3; // after the first reminder, nudge every Nth planless dispatch
@@ -258,8 +259,12 @@ async function main() {
     }
   }
 
+  // Stat the flag once and use it for both the no-plan branch below and the
+  // remaining-steps branch that follows it.
+  const hasPlan = fs.existsSync(path.join(STATE_DIR, `has-plan-${session}.flag`));
+
   // A plan exists: skip the plan reminder, but still emit anything collected above.
-  if (!fs.existsSync(path.join(STATE_DIR, `has-plan-${session}.flag`))) {
+  if (!hasPlan) {
     const countFile = path.join(STATE_DIR, `nudged-${session}.count`);
 
     const saved = quiet(() => fs.readFileSync(countFile, 'utf8').trim());
@@ -269,6 +274,28 @@ async function main() {
 
     // Fire on the first planless dispatch, then every REPEAT_EVERY after it.
     if (n === 1 || n % REPEAT_EVERY === 0) parts.push(MESSAGE);
+  }
+
+  // A plan exists. Echo what is left of it, because a long subagent run plus a
+  // context compaction can discard the plan from the conversation while the
+  // record on disk survives. Throttled the same way as the no-plan reminder
+  // above: fires on the first dispatch that has something to say, then every
+  // REPEAT_EVERY after that, so a session with 40 dispatches does not get 40
+  // copies of the step list.
+  if (hasPlan) {
+    const remaining = formatRemaining(readPlan(STATE_DIR, session));
+    if (remaining) {
+      const echoCountFile = path.join(STATE_DIR, `plan-echoed-${session}.count`);
+      const savedEcho = quiet(() => fs.readFileSync(echoCountFile, 'utf8').trim());
+      const seenEcho = savedEcho && /^\d+$/.test(savedEcho) ? Number(savedEcho) : 0;
+      const nEcho = seenEcho + 1;
+      quiet(() => atomicWrite(echoCountFile, String(nEcho)));
+      if (nEcho === 1 || nEcho % REPEAT_EVERY === 0) {
+        parts.push(
+          `[dev-agents] Remaining steps in the persisted task plan:\n${remaining}\n\nMark each one completed as you finish it. If this list is stale, the plan on disk is the record; update it rather than working from memory.`
+        );
+      }
+    }
   }
 
   if (parts.length === 0) return;

@@ -45,7 +45,7 @@
         ]
       },
       {
-        "matcher": "TaskCreate",
+        "matcher": "TaskCreate|TodoWrite",
         "hooks": [
           {
             "type": "command",

@@ -15,8 +15,13 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { writePlan, extractSteps } from './plan-store.mjs';
 
 const STATE_DIR = path.join(os.tmpdir(), 'claude-context-offload');
+
+// Some harness builds expose the plan-creating tool under one name, some the
+// other. Matching only TaskCreate means the store may never get written.
+const PLAN_TOOLS = new Set(['TaskCreate', 'TodoWrite']);
 
 const HOUR = 60 * 60 * 1000;
 const PRUNE_RULES = [
@@ -170,7 +175,7 @@ async function main() {
   }
 
   // Guard on the tool name as well as the hooks.json matcher.
-  if (input.tool_name !== 'TaskCreate') return;
+  if (!PLAN_TOOLS.has(input.tool_name)) return;
 
   // Sanitize before using the session id in a filename. The bash original
   // interpolated it raw, so an id containing a path separator would have
@@ -182,7 +187,11 @@ async function main() {
   // Sweep flags from sessions that ended long ago; nothing else deletes them.
   pruneStale(STATE_DIR, PRUNE_RULES);
 
+  // The flag answers "does a plan exist". The record answers "what is left in
+  // it", which is what survives a compaction. Both, on purpose.
   quiet(() => atomicWrite(path.join(STATE_DIR, `has-plan-${session}.flag`), '1'));
+  const steps = extractSteps(input.tool_input);
+  quiet(() => writePlan(STATE_DIR, session, () => ({ steps, raw: input.tool_input ?? null })));
 
   // A plan now exists, so reset the nudge counter. If the plan is later
   // abandoned and a fresh multi-step task starts without one, the reminder
