@@ -22,7 +22,8 @@
 // Over-nudging on writes is worse than on reads, because a wrong handoff costs
 // a round trip and can produce code that has to be redone.
 //
-// State: one file per session under the temp dir holding "<MODE>:<count>".
+// State: one file per session under the temp dir holding
+// `{ mode, n, paths }` as JSON (a legacy "<MODE>:<count>" body is still read).
 // Switching mode resets the count, which is what makes a streak consecutive
 // rather than cumulative. Files older than a day are swept opportunistically.
 
@@ -175,6 +176,61 @@ function atomicWrite(file, text) {
 }
 // --- /shared:atomicWrite ---
 
+// Which shape the recent reads have. The advice that follows is only useful if
+// it names the actual mistake: re-reading one file is a different problem from
+// sweeping a directory, and both are different from a scattered hunt.
+// Exported for the unit tests; the hook itself calls it internally.
+export function classifyReadPattern(paths) {
+  const usable = Array.isArray(paths) ? paths.filter((p) => typeof p === 'string' && p) : [];
+  if (usable.length === 0) return 'scattered';
+  const norm = usable.map((p) => p.replace(/\\/g, '/'));
+  const files = new Set(norm);
+  // One file dominating the window means it is being re-read, not explored.
+  const counts = new Map();
+  for (const p of norm) counts.set(p, (counts.get(p) ?? 0) + 1);
+  const topCount = Math.max(...counts.values());
+  if (topCount >= Math.ceil(norm.length * 0.6) && topCount >= 3) return 'same-file';
+  const dirs = new Set(norm.map((p) => p.slice(0, p.lastIndexOf('/') + 1)));
+  if (dirs.size === 1 && files.size >= 3) return 'same-dir';
+  return 'scattered';
+}
+
+// The streak file used to hold `MODE:COUNT` as plain text. Parse JSON first,
+// fall back to the legacy form, and treat anything else as a fresh window.
+// The mode letter is what makes these counts consecutive-per-mode rather than
+// cumulative: the streak resets when reads switch to writes.
+function readStreak(file) {
+  const raw = quiet(() => fs.readFileSync(file, 'utf8'));
+  if (!raw) return { mode: '', n: 0, paths: [] };
+  const parsed = quiet(() => JSON.parse(raw));
+  if (parsed && typeof parsed === 'object' && Number.isInteger(parsed.n)) {
+    return {
+      mode: typeof parsed.mode === 'string' ? parsed.mode : '',
+      n: parsed.n,
+      paths: Array.isArray(parsed.paths) ? parsed.paths : [],
+    };
+  }
+  const idx = String(raw).trim().indexOf(':');
+  if (idx > 0) {
+    const legacyMode = String(raw).trim().slice(0, idx);
+    const legacyN = String(raw).trim().slice(idx + 1);
+    if (/^\d+$/.test(legacyN)) return { mode: legacyMode, n: Number(legacyN), paths: [] };
+  }
+  return { mode: '', n: 0, paths: [] };
+}
+
+// Extract the path a tool acted on, using the key the relevant tool uses.
+// Read, Edit and Write carry `file_path`; Grep and Glob carry `path` or, when
+// no explicit path was given, `pattern`. Returns undefined when neither key is
+// present, so the caller can skip pushing anything for that entry.
+function extractPath(toolInput) {
+  const input = toolInput && typeof toolInput === 'object' ? toolInput : {};
+  if (typeof input.file_path === 'string' && input.file_path) return input.file_path;
+  if (typeof input.path === 'string' && input.path) return input.path;
+  if (typeof input.pattern === 'string' && input.pattern) return input.pattern;
+  return undefined;
+}
+
 async function main() {
   const raw = await readStdin();
   let input;
@@ -209,27 +265,23 @@ async function main() {
     return;
   }
 
-  let prevMode = '';
-  let count = 0;
-  const saved = quiet(() => fs.readFileSync(stateFile, 'utf8').trim());
-  if (saved) {
-    const idx = saved.indexOf(':');
-    if (idx >= 0) {
-      prevMode = saved.slice(0, idx);
-      const n = saved.slice(idx + 1);
-      count = /^\d+$/.test(n) ? Number(n) : 0;
-    }
-  }
-
-  count = prevMode === mode ? count + 1 : 1;
-  quiet(() => atomicWrite(stateFile, `${mode}:${count}`));
+  const streak = readStreak(stateFile);
+  const count = streak.mode === mode ? streak.n + 1 : 1;
+  const paths = streak.mode === mode ? streak.paths.slice() : [];
+  const p = extractPath(input.tool_input);
+  if (p) paths.push(p);
+  quiet(() => atomicWrite(stateFile, JSON.stringify({ mode, n: count, paths: paths.slice(-20) })));
 
   let msg = '';
   if (mode === 'R') {
-    if (count === READ_THRESHOLD) {
-      msg = `This thread has made ${count} read-only lookups (Read/Grep/Glob) in a row without doing anything else. If open-ended exploration remains, delegate it to quick-read instead of continuing inline. It keeps the raw output in its own context and returns only the conclusion.`;
-    } else if (count > READ_THRESHOLD && count % READ_REPEAT === 0) {
-      msg = `Still reading inline (${count} consecutive lookups). If the remaining exploration is self-contained, quick-read would keep this context smaller.`;
+    const shape = classifyReadPattern(paths);
+    const advice = {
+      'same-file': `[dev-agents] You have read ${count} files in a row and the same file keeps coming back. Re-reading one file means the answer is not in the file, it is in the reasoning about it. Delegation will not help here; either read the whole file once and hold it, or hand the actual question to dev-agents:deepthink.`,
+      'same-dir': `[dev-agents] You have read ${count} files in a row, all from one directory. That is a survey, and a survey is exactly what dev-agents:quick-read is for: it runs on haiku, its context absorbs the file bodies, and only the conclusion comes back. Brief it with the directory and the question, not the file list.`,
+      scattered: `[dev-agents] You have read ${count} files in a row, spread across unrelated directories. That is a search, not a read. Hand it to dev-agents:quick-read with the thing you are looking for, and let the file dumps stay in its context instead of yours.`,
+    }[shape];
+    if (count === READ_THRESHOLD || (count > READ_THRESHOLD && count % READ_REPEAT === 0)) {
+      msg = advice;
     }
   } else {
     if (count === WRITE_THRESHOLD) {
