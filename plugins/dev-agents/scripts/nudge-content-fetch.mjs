@@ -245,7 +245,9 @@ function quiet(fn) {
 // in one message run these hooks at the same time, which is when this matters.
 // Windows can still return EPERM on the rename when a scanner or another
 // process holds the target, so retry, then fall back to a direct write:
-// a torn file is bad, but losing the state entirely is worse.
+// a torn file is bad, but losing the state entirely is worse. If the final
+// cleanup attempt below also fails, the tmp file is orphaned; the state
+// directory's stale sweep collects it.
 function atomicWrite(file, text) {
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -265,6 +267,11 @@ function atomicWrite(file, text) {
         /* nothing to clean up */
       }
     }
+  }
+  try {
+    fs.unlinkSync(tmp);
+  } catch {
+    /* orphaned; the state directory's stale sweep collects it */
   }
   try {
     fs.writeFileSync(file, text);

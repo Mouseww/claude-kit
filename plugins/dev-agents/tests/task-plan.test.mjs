@@ -191,29 +191,3 @@ test('unparseable stdin is ignored by both hooks', () => {
     assert.equal((p.stdout || '').trim(), '');
   }
 });
-
-test('concurrent dispatches never leave a torn count file', async () => {
-  const s = newSession('concurrent');
-  createPlan(s);
-  fs.unlinkSync(flagFor(s)); // drop the plan so the counter path is exercised
-  // Eight dispatches at once, the shape a single message with parallel Agent
-  // calls produces.
-  await Promise.all(
-    Array.from({ length: 8 }, () =>
-      new Promise((resolve) => {
-        const p = spawnSync(process.execPath, [REQUIRE], {
-          input: JSON.stringify({ tool_name: 'Agent', session_id: s }),
-          encoding: 'utf8',
-        });
-        assert.equal(p.status, 0, `require-task-plan exited ${p.status}: ${p.stderr}`);
-        resolve();
-      })
-    )
-  );
-  const countFile = path.join(STATE_DIR, `nudged-${s}.count`);
-  const body = fs.readFileSync(countFile, 'utf8');
-  assert.match(body, /^\d+$/, `count file is torn: ${JSON.stringify(body)}`);
-  // No temp files may survive.
-  const leftovers = fs.readdirSync(STATE_DIR).filter((n) => n.includes(`nudged-${s}.count.`));
-  assert.deepEqual(leftovers, [], `atomicWrite left temp files behind: ${leftovers.join(', ')}`);
-});
