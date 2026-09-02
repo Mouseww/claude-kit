@@ -34,6 +34,18 @@ export const HELPER_OWNERS = {
     'plugins/context-trim/scripts/measure-subagent.mjs',
     'plugins/rtk/scripts/rtk-rewrite.mjs',
   ],
+  readStdin: [
+    'plugins/dev-agents/scripts/require-task-plan.mjs',
+    'plugins/dev-agents/scripts/track-task-plan.mjs',
+    'plugins/dev-agents/scripts/check-subagent-return.mjs',
+    'plugins/dev-agents/scripts/nudge-subagent-delegation.mjs',
+    'plugins/dev-agents/scripts/nudge-content-fetch.mjs',
+    'plugins/dev-agents/scripts/gate-last-resort.mjs',
+    'plugins/context-trim/scripts/truncate-verbose-output.mjs',
+    'plugins/context-trim/scripts/measure-subagent.mjs',
+    'plugins/claude-kit-meta/scripts/check-daily-update.mjs',
+    'plugins/rtk/scripts/rtk-rewrite.mjs',
+  ],
 };
 
 // Returns the marker block including both marker lines, or null when absent.

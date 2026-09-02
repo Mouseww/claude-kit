@@ -40,32 +40,49 @@ const WRITE_REPEAT = 10; // and every N after that
 const STATE_DIR = path.join(os.tmpdir(), 'claude-context-offload');
 const STALE_MS = 24 * 60 * 60 * 1000;
 
-function readStdin() {
+// --- shared:readStdin --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
+// Two deadlines on purpose. The idle timer covers the common case of a stream
+// that goes quiet without an end event. The absolute one covers a stream that
+// keeps producing, which resets the idle timer forever and used to mean this
+// never resolved at all. Both resolve with whatever arrived; a partial body
+// fails JSON.parse and every caller treats that as "do nothing".
+//
+// finish() detaches from stdin as well as resolving. Resolving alone is not
+// enough: a stream that is still flowing keeps the process alive long after the
+// promise settles, so the hook would sail past its own deadline and hang. The
+// detach is what makes the absolute deadline actually bound the process.
+function readStdin(idleMs = 5000, absoluteMs = 30000) {
   return new Promise((resolve) => {
     let buf = '';
-    let timer = null;
-    const IDLE_MS = 5000;
-    const resetTimer = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => resolve(buf), IDLE_MS);
-      timer.unref();
+    let idle = null;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      if (idle) clearTimeout(idle);
+      clearTimeout(hard);
+      process.stdin.removeAllListeners('data');
+      process.stdin.pause();
+      resolve(buf);
+    };
+    const hard = setTimeout(finish, absoluteMs);
+    hard.unref();
+    const resetIdle = () => {
+      if (idle) clearTimeout(idle);
+      idle = setTimeout(finish, idleMs);
+      idle.unref();
     };
     process.stdin.setEncoding('utf8');
-    resetTimer();
+    resetIdle();
     process.stdin.on('data', (c) => {
       buf += c;
-      resetTimer();
+      resetIdle();
     });
-    process.stdin.on('end', () => {
-      if (timer) clearTimeout(timer);
-      resolve(buf);
-    });
-    process.stdin.on('error', () => {
-      if (timer) clearTimeout(timer);
-      resolve(buf);
-    });
+    process.stdin.on('end', finish);
+    process.stdin.on('error', finish);
   });
 }
+// --- /shared:readStdin ---
 
 // --- shared:quiet --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
 function quiet(fn) {

@@ -541,3 +541,20 @@ test('telemetry: never breaks the hook even if the log directory cannot be creat
     assert.ok((p.stdout || '').trim().length > 0);
   });
 });
+
+test('a stream that never stops producing is cut off by the absolute deadline', async () => {
+  const { spawn } = await import('node:child_process');
+  const p = spawn(process.execPath, [SCRIPT], { stdio: ['pipe', 'pipe', 'pipe'] });
+  // Keep writing forever, faster than the 5s idle timer, so only the absolute
+  // deadline can end this. Never send 'end'.
+  const pump = setInterval(() => {
+    if (!p.stdin.destroyed) p.stdin.write('x'.repeat(1024));
+  }, 200);
+  const started = Date.now();
+  const code = await new Promise((resolve) => p.on('close', resolve));
+  clearInterval(pump);
+  const elapsed = Date.now() - started;
+  assert.equal(code, 0, 'the hook must always exit 0');
+  assert.ok(elapsed < 15000, `expected the absolute deadline to fire, took ${elapsed}ms`);
+  assert.ok(elapsed > 6000, `expected it not to fire before the 8s deadline, took ${elapsed}ms`);
+});
