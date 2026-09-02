@@ -46,6 +46,20 @@ export function isRuntimePath(relPath) {
   return RUNTIME_DIRS.includes(rest[0]);
 }
 
+// Compares two `x.y.z` version strings numerically, part by part. Both sides
+// are already validated as bare x.y.z by validate.mjs, so this stays a plain
+// numeric compare rather than a full semver parser. Returns negative, zero,
+// or positive the way Array.prototype.sort expects.
+function compareVersions(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
 export function decide(changedPaths, versionsBefore, versionsAfter) {
   const touched = new Set();
   for (const p of changedPaths) {
@@ -62,10 +76,17 @@ export function decide(changedPaths, versionsBefore, versionsAfter) {
     // make. Added and deleted packs are both fine.
     if (before == null || after == null) continue;
     checked.push(name);
-    if (before === after) {
+    // Strictly greater, not merely different: an equal version is unbumped,
+    // and a downgrade (e.g. a merge conflict resolved toward the older side)
+    // is exactly the no-op `claude plugin update` case this gate exists to
+    // catch, not a pass.
+    if (compareVersions(after, before) <= 0) {
       violations.push({
         plugin: name,
-        reason: `runtime files changed but version stayed at ${after}`,
+        reason:
+          after === before
+            ? `runtime files changed but version stayed at ${after}`
+            : `runtime files changed but version went backwards, from ${before} to ${after}`,
       });
     }
   }
@@ -166,5 +187,9 @@ function main() {
 
 // Guard so importing this module (as the test file does) does not also run
 // main() and exit the process before the imported test() bodies execute.
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+//
+// Compares two normalized native paths rather than a file:// URL, which
+// avoids a drive-letter-case mismatch on Windows that the URL form does not
+// normalize away.
+const isMain = path.resolve(process.argv[1] || '') === fileURLToPath(import.meta.url);
 if (isMain) main();

@@ -4,10 +4,27 @@
 //
 // Only the pure decision is tested. Resolving a git base ref is I/O and is
 // covered by the skip paths in the script itself, not here.
+//
+// One exception: a spawn test below proves the isMain guard actually fires.
+// A guard that stops matching (e.g. a URL-vs-path mismatch on Windows) makes
+// this script print nothing and exit 0 -- a green CI step enforcing nothing,
+// in the one script whose entire value is that it fires.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { isRuntimePath, pluginOf, decide } from '../scripts/check-version-bump.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const SCRIPT = path.join(HERE, '..', 'scripts', 'check-version-bump.mjs');
+
+test('running the script directly with no --base actually runs main() and prints SKIP, exit 0', () => {
+  const res = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8' });
+  assert.equal(res.status, 0);
+  assert.match(res.stdout, /SKIP:/);
+});
 
 test('a hook script is a runtime path', () => {
   assert.equal(isRuntimePath('plugins/dev-agents/scripts/require-task-plan.mjs'), true);
@@ -92,6 +109,27 @@ test('several plugins are reported independently', () => {
   );
   assert.equal(violations.length, 1);
   assert.equal(violations[0].plugin, 'rtk');
+});
+
+test('an equal version is still a violation', () => {
+  const { violations } = decide(
+    ['plugins/dev-agents/scripts/require-task-plan.mjs'],
+    { 'dev-agents': '1.8.0' },
+    { 'dev-agents': '1.8.0' }
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0].reason, /stayed at 1\.8\.0/);
+});
+
+test('a downgrade is a violation, not a pass', () => {
+  const { violations } = decide(
+    ['plugins/dev-agents/scripts/require-task-plan.mjs'],
+    { 'dev-agents': '1.9.0' },
+    { 'dev-agents': '1.8.0' }
+  );
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].plugin, 'dev-agents');
+  assert.match(violations[0].reason, /backwards, from 1\.9\.0 to 1\.8\.0/);
 });
 
 test('checked lists every plugin the gate actually considered', () => {

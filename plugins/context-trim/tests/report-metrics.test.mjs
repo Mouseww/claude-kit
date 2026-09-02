@@ -227,6 +227,18 @@ test('an oversized marker in the log produces the oversized-record note; a clean
 // grouped Real-usage table fabricates a phantom "unknown" row with 0 tokens
 // and 0 duration -- a fake row standing in for a lost one, which is exactly
 // the corruption the marker was supposed to prevent.
+// Proves the isMain guard actually fires when the script is spawned as a
+// CLI. A guard that stops matching (e.g. a URL-vs-path mismatch on Windows)
+// would make runReport() never execute, and the script would print nothing
+// while still exiting 0 -- a silent no-op indistinguishable from success.
+test('spawning the script directly produces the normal report output, not nothing', () => {
+  const out = run([
+    { ts: ts(), event: 'stop', agent: 'dev-agents:quick-read', agent_id: 'a1', duration_s: 5, returned_chars: 100 },
+  ]);
+  assert.match(out, /Metrics log:/);
+  assert.match(out, /== Per-agent invocations ==/);
+});
+
 test('an oversized agent_usage marker is excluded from the Real-usage table, while a normal agent_usage row is not', () => {
   const out = run([
     {

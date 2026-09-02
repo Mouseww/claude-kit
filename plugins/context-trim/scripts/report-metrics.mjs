@@ -28,7 +28,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 // A crashed session can leave a half-written line, and a torn line is also
 // possible in normal operation: several subagents append to this log at once
@@ -316,6 +316,9 @@ if (oversized > 0) {
 }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+// Compares two normalized native paths rather than a file:// URL, which
+// avoids a drive-letter-case mismatch on Windows that the URL form does not
+// normalize away. Same idiom as scripts/check-version-bump.mjs.
+if (path.resolve(process.argv[1] || '') === fileURLToPath(import.meta.url)) {
   runReport();
 }

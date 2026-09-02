@@ -209,7 +209,10 @@ test('a plugin.json with no "license" is reported', () => {
   assert.match(r.out, /missing "license"/);
 });
 
-test('a plugin.json with a 39-char description is reported', () => {
+// F9: a short plugin.json description is a warning, not a hard error,
+// matching the identical 40-char rule applied to SKILL.md descriptions. A
+// correct but deliberately terse manifest must still pass CI.
+test('a plugin.json with a 39-char description is warned, not failed', () => {
   writeMarketplace();
   const pluginDir = path.join(dir, 'plugins', 'test-pack');
   fs.mkdirSync(path.join(pluginDir, '.claude-plugin'), { recursive: true });
@@ -223,8 +226,9 @@ test('a plugin.json with a 39-char description is reported', () => {
     })
   );
   const r = run();
-  assert.notEqual(r.status, 0);
-  assert.match(r.out, /"description" is 39 chars/);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /warn.*"description" is 39 chars/);
+  assert.doesNotMatch(r.out, /FAIL:/);
 });
 
 test('a hook item with a non-"command" type is reported', () => {
@@ -300,6 +304,30 @@ test('a plugin.json "hooks" array containing a number is reported through FAIL, 
   assert.match(r.out, /"hooks" contains a non-string entry: 5/);
   assert.match(r.out, /FAIL:/);
   assert.doesNotMatch(r.out, /TypeError/);
+});
+
+// F8: keywords used to be checked with Array.isArray only, so a numeric
+// element like `[1, 2]` passed CI even though the schema declares
+// keywords.items as strings. This is the divergence closed by requiring
+// every element to be a non-empty string.
+test('a plugin.json "keywords" array containing a number is reported, not silently accepted', () => {
+  writeMarketplace();
+  const pluginDir = path.join(dir, 'plugins', 'test-pack');
+  fs.mkdirSync(path.join(pluginDir, '.claude-plugin'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, '.claude-plugin', 'plugin.json'),
+    JSON.stringify({
+      name: 'test-pack',
+      version: '1.0.0',
+      description: 'x'.repeat(50),
+      license: 'MIT',
+      keywords: [1, 2],
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /"keywords\[0\]" must be a non-empty string/);
+  assert.match(r.out, /FAIL:/);
 });
 
 test('an unknown key at the hooks.json top level is reported', () => {

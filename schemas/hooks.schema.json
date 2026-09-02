@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://claude-kit.local/schemas/hooks.schema.json",
   "title": "claude-kit hooks manifest",
-  "description": "Shape of plugins/<name>/hooks/hooks.json. Mirrored by scripts/validate.mjs, which is the enforcing copy.",
+  "description": "Shape of plugins/<name>/hooks/hooks.json. scripts/validate.mjs is the enforcing copy; this schema is close to it but not identical, and exists for editor completion only.",
   "type": "object",
   "required": ["hooks"],
   "properties": {
@@ -27,6 +27,7 @@
                   "type": { "const": "command" },
                   "command": {
                     "type": "string",
+                    "pattern": "^node\\s",
                     "description": "Must start with `node` and reference a .mjs under ${CLAUDE_PLUGIN_ROOT}."
                   },
                   "timeout": { "type": "integer", "minimum": 1, "maximum": 600 }

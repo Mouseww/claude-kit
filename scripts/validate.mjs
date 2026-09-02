@@ -454,11 +454,16 @@ function checkHookCommands(hooks, hooksFile, pluginDir) {
 // this is the copy CI actually runs, because this repo installs no dependencies
 // and therefore has no schema engine.
 function checkPluginManifestShape(plugin, manifestFile) {
+  // license and version are hard errors: a pack missing either is genuinely
+  // broken, and version is the sole `claude plugin update` trigger (see
+  // scripts/check-version-bump.mjs). description is a warning, matching the
+  // identical 40-char rule this file applies to SKILL.md descriptions below;
+  // a correct but deliberately terse manifest should not fail CI over it.
   if (!plugin.license) err(manifestFile, 'missing "license"');
   if (plugin.description && String(plugin.description).length < 40) {
-    err(
+    warn(
       manifestFile,
-      `"description" is ${String(plugin.description).length} chars; the schema requires at least 40, because this is what a user reads when choosing a pack`
+      `"description" is ${String(plugin.description).length} chars; the schema suggests at least 40, because this is what a user reads when choosing a pack`
     );
   }
   if (plugin.version != null && !/^\d+\.\d+\.\d+$/.test(String(plugin.version))) {
@@ -470,8 +475,16 @@ function checkPluginManifestShape(plugin, manifestFile) {
   if (plugin.defaultEnabled != null && typeof plugin.defaultEnabled !== 'boolean') {
     err(manifestFile, '"defaultEnabled" must be a boolean');
   }
-  if (plugin.keywords != null && !Array.isArray(plugin.keywords)) {
-    err(manifestFile, '"keywords" must be an array');
+  if (plugin.keywords != null) {
+    if (!Array.isArray(plugin.keywords)) {
+      err(manifestFile, '"keywords" must be an array');
+    } else {
+      for (const [i, k] of plugin.keywords.entries()) {
+        if (typeof k !== 'string' || k.length === 0) {
+          err(manifestFile, `"keywords[${i}]" must be a non-empty string`);
+        }
+      }
+    }
   }
   if (plugin.externalSkills != null) {
     if (typeof plugin.externalSkills !== 'object' || Array.isArray(plugin.externalSkills)) {

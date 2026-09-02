@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://claude-kit.local/schemas/plugin.schema.json",
   "title": "claude-kit plugin manifest",
-  "description": "Shape of plugins/<name>/.claude-plugin/plugin.json. Mirrored by scripts/validate.mjs, which is the enforcing copy.",
+  "description": "Shape of plugins/<name>/.claude-plugin/plugin.json. scripts/validate.mjs is the enforcing copy; this schema is close to it but not identical, and exists for editor completion only.",
   "type": "object",
   "required": ["name", "version", "description", "license"],
   "properties": {
@@ -17,9 +17,13 @@
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
       "description": "The only update trigger. Bump it or `claude plugin update` is a no-op."
     },
-    "description": { "type": "string", "minLength": 40 },
+    "description": {
+      "type": "string",
+      "minLength": 40,
+      "description": "Below 40 chars is a warning in validate.mjs, not a hard error; a correct but terse manifest still passes CI."
+    },
     "license": { "type": "string" },
-    "keywords": { "type": "array", "items": { "type": "string" } },
+    "keywords": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "defaultEnabled": { "type": "boolean" },
     "hooks": {
       "description": "Only for EXTRA hook files. hooks/hooks.json is auto-loaded; naming it here makes the plugin fail to load.",
@@ -28,7 +32,7 @@
     "externalSkills": {
       "type": "object",
       "description": "Skills an agent references that are not shipped in this repo. Key is the skill name, value is why.",
-      "additionalProperties": { "type": "string" }
+      "additionalProperties": { "type": "string", "minLength": 1 }
     }
   },
   "additionalProperties": true
