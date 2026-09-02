@@ -111,6 +111,43 @@ function quiet(fn) {
 }
 // --- /shared:quiet ---
 
+// --- shared:atomicWrite --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
+// Write to a unique temp name, then rename over the target. rename is atomic
+// on POSIX and near enough on NTFS, so a concurrent reader sees either the old
+// bytes or the new ones, never a half-written file. Parallel Agent dispatches
+// in one message run these hooks at the same time, which is when this matters.
+// Windows can still return EPERM on the rename when a scanner or another
+// process holds the target, so retry, then fall back to a direct write:
+// a torn file is bad, but losing the state entirely is worse.
+function atomicWrite(file, text) {
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+  } catch {
+    /* already there, or unwritable; the write below reports it */
+  }
+  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      fs.writeFileSync(tmp, text);
+      fs.renameSync(tmp, file);
+      return true;
+    } catch {
+      try {
+        fs.unlinkSync(tmp);
+      } catch {
+        /* nothing to clean up */
+      }
+    }
+  }
+  try {
+    fs.writeFileSync(file, text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+// --- /shared:atomicWrite ---
+
 // A content block is either a plain string or an object carrying a .text
 // field (or something else that stringifies). Extract the text either way.
 function blockText(b) {
@@ -170,7 +207,7 @@ async function main() {
   if (toolInput.run_in_background === true) {
     const bgFlag = path.join(STATE_DIR, `bg-ack-${session}.flag`);
     if (!fs.existsSync(bgFlag)) {
-      quiet(() => fs.writeFileSync(bgFlag, '1'));
+      quiet(() => atomicWrite(bgFlag, '1'));
       process.stdout.write(
         JSON.stringify({
           hookSpecificOutput: {
@@ -220,7 +257,7 @@ async function main() {
     const saved = quiet(() => fs.readFileSync(countFile, 'utf8').trim());
     const seen = saved && /^\d+$/.test(saved) ? Number(saved) : 0;
     const n = seen + 1;
-    quiet(() => fs.writeFileSync(countFile, String(n)));
+    quiet(() => atomicWrite(countFile, String(n)));
 
     if (n === 1 || n % REPEAT_EVERY === 0) {
       process.stdout.write(

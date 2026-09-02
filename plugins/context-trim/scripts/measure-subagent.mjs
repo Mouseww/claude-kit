@@ -96,6 +96,43 @@ function quiet(fn) {
 }
 // --- /shared:quiet ---
 
+// --- shared:atomicWrite --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
+// Write to a unique temp name, then rename over the target. rename is atomic
+// on POSIX and near enough on NTFS, so a concurrent reader sees either the old
+// bytes or the new ones, never a half-written file. Parallel Agent dispatches
+// in one message run these hooks at the same time, which is when this matters.
+// Windows can still return EPERM on the rename when a scanner or another
+// process holds the target, so retry, then fall back to a direct write:
+// a torn file is bad, but losing the state entirely is worse.
+function atomicWrite(file, text) {
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+  } catch {
+    /* already there, or unwritable; the write below reports it */
+  }
+  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      fs.writeFileSync(tmp, text);
+      fs.renameSync(tmp, file);
+      return true;
+    } catch {
+      try {
+        fs.unlinkSync(tmp);
+      } catch {
+        /* nothing to clean up */
+      }
+    }
+  }
+  try {
+    fs.writeFileSync(file, text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+// --- /shared:atomicWrite ---
+
 function log(obj) {
   quiet(() => fs.appendFileSync(LOG_FILE, JSON.stringify(obj) + '\n'));
 }
@@ -159,7 +196,7 @@ async function main() {
     const startFile = path.join(STATE_DIR, `start-${safeKey}`);
 
     if (event === 'SubagentStart') {
-      quiet(() => fs.writeFileSync(startFile, String(now)));
+      quiet(() => atomicWrite(startFile, String(now)));
       log({ ts, event: 'start', agent, agent_id: key, session, effort });
       return;
     }
