@@ -174,9 +174,7 @@ function quiet(fn) {
 // in one message run these hooks at the same time, which is when this matters.
 // Windows can still return EPERM on the rename when a scanner or another
 // process holds the target, so retry, then fall back to a direct write:
-// a torn file is bad, but losing the state entirely is worse. If the final
-// cleanup attempt below also fails, the tmp file is orphaned; the state
-// directory's stale sweep collects it.
+// a torn file is bad, but losing the state entirely is worse.
 function atomicWrite(file, text) {
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -200,7 +198,10 @@ function atomicWrite(file, text) {
   try {
     fs.unlinkSync(tmp);
   } catch {
-    /* orphaned; the state directory's stale sweep collects it */
+    /* A failed cleanup leaves at most one orphaned .tmp beside the target. That
+       bound is the reason the name is computed once and reused across attempts
+       rather than regenerated per attempt, which would allow up to three. These
+       live in the OS temp directory and nothing here tracks them further. */
   }
   try {
     fs.writeFileSync(file, text);
