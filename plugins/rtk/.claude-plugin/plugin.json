@@ -1,7 +1,7 @@
 {
   "$schema": "../../../schemas/plugin.schema.json",
   "name": "rtk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "defaultEnabled": false,
   "description": "Rewrites verbose shell commands into compressed equivalents before they run, so `git log`, `ls -R`, `cargo test` and about a hundred others return a digest instead of a wall of text. Wraps the external `rtk` binary (Apache-2.0, single Rust executable, native Windows build) through a PreToolUse hook. Depends on that binary being on PATH, which this plugin does not install for you; run /rtk:setup. Deliberately does NOT run `rtk init -g`: the upstream installer writes its hook into your global settings.json, drops a RTK.md into ~/.claude, and appends an @RTK.md reference to your global CLAUDE.md, none of which uninstall when you disable a plugin. This pack owns its own hook instead, so turning the plugin off actually turns the behavior off. Matches Bash only, never PowerShell, because rtk's rewrite rules assume POSIX command syntax. Every failure path in the wrapper passes the command through unchanged, so a missing or broken binary costs you nothing.",
   "keywords": ["rtk", "token", "shell", "compression", "hooks", "context"],

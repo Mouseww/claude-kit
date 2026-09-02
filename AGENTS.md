@@ -27,6 +27,21 @@ what is easy to get wrong.
    node --test "plugins/**/tests/*.test.mjs" "tests/*.test.mjs"
    ```
 
+5. **The `shared:` marker blocks are load-bearing.** Several helpers
+   (`quiet`, `readStdin`, `atomicWrite`, `pruneStale`, `appendJsonl`) are
+   copied verbatim into every pack that needs them, wrapped in
+   `// --- shared:<name> ---` comment pairs.
+   `tests/hook-helpers-consistent.test.mjs` asserts every copy is
+   byte-identical and is the source of truth for which script carries which
+   helper. Change one copy and CI fails; change all of them and it passes.
+   Do **not** replace this with a shared module under `plugins/`: every pack
+   is installed independently via its own `source` in `marketplace.json`, so
+   a shared directory is simply absent after `claude plugin add dev-agents`,
+   and `scripts/validate.mjs` rejects any `plugins/` subdirectory that is not
+   a listed pack. A sibling import *inside* one pack is fine and has
+   precedent (`plugins/claude-kit-meta/scripts/check-daily-update.mjs`,
+   `plugins/dev-agents/scripts/plan-store.mjs`).
+
 ## Things that look like bugs but are not
 
 - `plugins/context-trim` writes its metrics to
@@ -54,6 +69,27 @@ what is easy to get wrong.
   `nesting-discipline`, so do not delete that check as unfounded. An explicit
   `tools:` list is an allowlist, so omitting `Skill` only stops the agent
   loading *other* skills at run time; the preloaded ones are already present.
+- `readStdin` carries two deadlines. The idle one (5s) covers a stream that
+  goes quiet without an end event; the absolute one covers a stream that keeps
+  producing, which resets the idle timer forever and used to mean the read
+  never resolved. `truncate-verbose-output.mjs` passes 8000 explicitly because
+  its hook budget is 10s and it is the one script that can receive a large
+  continuous stream. Do not "simplify" this back to one timer.
+- `plan-store.mjs` writes a `revision` on every record and rejects a write
+  whose base revision has moved before it was re-read. This narrows the
+  clobber window, it does not close it: a writer that reads revision N, is
+  beaten to disk by another writer, and only then tries to write is correctly
+  rejected and retries, but two writers that both read N and both pass the
+  re-read before either renames will both write, and the second rename wins
+  silently. Closing that fully would need an exclusive per-revision claim,
+  and an orphaned claim from a crashed hook would wedge the store until the
+  24h prune collected it, which is a worse failure than a lost update. Taken
+  from `dsh-agent-teams`, which solves the same race with an attempt token.
+- `plan-store.mjs` `extractSteps` probes several candidate key names and
+  stores the raw payload under `raw`. The plan-creating tool's `tool_input`
+  shape is not documented and differs between harness builds, so the
+  tolerant probe is deliberate. Tighten it from an observed real `raw`
+  payload, not from a guess.
 
 ## Where guidance goes: block vs skill
 

@@ -103,7 +103,7 @@ function versionsAt(ref) {
   for (const name of new Set(names)) {
     const file = `plugins/${name}/.claude-plugin/plugin.json`;
     try {
-      const text = ref === 'WORKTREE' ? fs.readFileSync(path.join(ROOT, file), 'utf8') : git(['show', `${ref}:${file}`]);
+      const text = git(['show', `${ref}:${file}`]);
       const v = JSON.parse(text).version;
       if (v != null) out[name] = String(v);
     } catch {

@@ -139,6 +139,18 @@ the only way out was 1.2.3.
 
 Full steps: "Maintaining this repository" in `README.md`.
 
+`scripts/check-version-bump.mjs` enforces this in CI. It compares the merge-base
+of your branch against the target and fails when a pack's **runtime** files
+changed and its version did not. Runtime means `scripts/`, `hooks/`, `agents/`,
+`skills/`, `commands/`, `.claude-plugin/`, plus `.mcp.json` and
+`claude-md-block.md` at the pack root. A change confined to `README.md` or
+`tests/` ships nothing to a user and needs no bump.
+
+Every infrastructure problem is a skip, not a failure: a shallow clone, a base
+ref this clone does not have, or a branch with divergent history all exit 0.
+That is deliberate. This repo pushes to two remotes with unrelated history and a
+gate that red-builds one of them would just teach everyone to ignore it.
+
 ## Before committing
 
 ```bash
