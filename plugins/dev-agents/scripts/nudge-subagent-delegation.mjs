@@ -210,6 +210,9 @@ function readStreak(file) {
       paths: Array.isArray(parsed.paths) ? parsed.paths : [],
     };
   }
+  // A corrupted fragment could in principle split into a valid-looking
+  // `MODE:COUNT`; the blast radius is one session's streak count, and any other
+  // malformed body yields an empty mode that matches nothing and resets.
   const idx = String(raw).trim().indexOf(':');
   if (idx > 0) {
     const legacyMode = String(raw).trim().slice(0, idx);
@@ -274,7 +277,10 @@ async function main() {
 
   let msg = '';
   if (mode === 'R') {
-    const shape = classifyReadPattern(paths);
+    // scattered is the safe default: its advice (hand the search to quick-read)
+    // is never actively wrong, whereas same-file advises against delegating and
+    // would be the harmful thing to say by accident.
+    const shape = quiet(() => classifyReadPattern(paths)) ?? 'scattered';
     const advice = {
       'same-file': `[dev-agents] You have read ${count} files in a row and the same file keeps coming back. Re-reading one file means the answer is not in the file, it is in the reasoning about it. Delegation will not help here; either read the whole file once and hold it, or hand the actual question to dev-agents:deepthink.`,
       'same-dir': `[dev-agents] You have read ${count} files in a row, all from one directory. That is a survey, and a survey is exactly what dev-agents:quick-read is for: it runs on haiku, its context absorbs the file bodies, and only the conclusion comes back. Brief it with the directory and the question, not the file list.`,

@@ -36,8 +36,15 @@ test('files spread across unrelated directories is scattered', () => {
   assert.equal(classifyReadPattern(paths), 'scattered');
 });
 
-test('windows and posix separators classify the same way', () => {
-  assert.equal(classifyReadPattern(['src\\api\\a.ts', 'src\\api\\b.ts', 'src\\api\\c.ts']), 'same-dir');
+test('windows and posix separators normalize into the same directory bucket', () => {
+  // Mixed on purpose. With normalization every path keys to 'src/api/', so
+  // dirs.size is 1 and this is a same-dir survey. WITHOUT normalization the
+  // forward-slash path keys to 'src/api/' while the backslash paths key to ''
+  // (lastIndexOf('/') is -1), giving dirs.size 2 and a 'scattered' verdict.
+  // An all-backslash list cannot tell those apart, because every key would be
+  // '' either way.
+  const paths = ['src/api/a.ts', 'src\\api\\b.ts', 'src\\api\\c.ts'];
+  assert.equal(classifyReadPattern(paths), 'same-dir');
 });
 
 test('an empty or unusable list is scattered, the safest default', () => {
