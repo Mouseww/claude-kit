@@ -40,7 +40,10 @@ const LOG_DIR = path.join(os.homedir(), '.claude');
 const LOG_FILE = path.join(LOG_DIR, 'context-offload-metrics.jsonl');
 const STATE_DIR = path.join(os.tmpdir(), 'claude-context-offload');
 
-const STALE_START_MS = 720 * 60 * 1000; // 12h, matches the old `find -mmin +720`
+const PRUNE_RULES = [
+  { prefix: 'start-', ttlMs: 12 * 60 * 60 * 1000 }, // 12h, matches the old `find -mmin +720`
+  { suffix: '.tmp', ttlMs: 24 * 60 * 60 * 1000 },
+];
 
 // --- shared:readStdin --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
 // Two deadlines on purpose. The idle timer covers the common case of a stream
@@ -96,6 +99,32 @@ function quiet(fn) {
 }
 // --- /shared:quiet ---
 
+// --- shared:pruneStale --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
+// Per-rule TTLs, because a subagent start marker is stale after hours while a
+// session flag is not. A rule matches on prefix, on suffix, or on both: the
+// files in this directory are named both ways, `has-plan-<session>.flag` from
+// the front and `<session>.streak` from the back, so prefix-only matching
+// cannot express every owner. Nothing here may throw: a hook that died during
+// housekeeping would drop the work it was actually called to do.
+function pruneStale(stateDir, rules) {
+  quiet(() => {
+    const now = Date.now();
+    for (const name of fs.readdirSync(stateDir)) {
+      const rule = rules.find(
+        (r) =>
+          (r.prefix === undefined || name.startsWith(r.prefix)) &&
+          (r.suffix === undefined || name.endsWith(r.suffix))
+      );
+      if (!rule) continue;
+      const p = path.join(stateDir, name);
+      quiet(() => {
+        if (now - fs.statSync(p).mtimeMs > rule.ttlMs) fs.unlinkSync(p);
+      });
+    }
+  });
+}
+// --- /shared:pruneStale ---
+
 // --- shared:atomicWrite --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
 // Write to a unique temp name, then rename over the target. rename is atomic
 // on POSIX and near enough on NTFS, so a concurrent reader sees either the old
@@ -146,21 +175,6 @@ function log(obj) {
   quiet(() => fs.appendFileSync(LOG_FILE, JSON.stringify(obj) + '\n'));
 }
 
-// Sweep stale start-markers. A subagent that was killed, or a session that
-// crashed, never fires SubagentStop, so these would accumulate forever.
-function sweepStaleStarts() {
-  quiet(() => {
-    const cutoff = Date.now() - STALE_START_MS;
-    for (const name of fs.readdirSync(STATE_DIR)) {
-      if (!name.startsWith('start-')) continue;
-      const p = path.join(STATE_DIR, name);
-      quiet(() => {
-        if (fs.statSync(p).mtimeMs < cutoff) fs.unlinkSync(p);
-      });
-    }
-  });
-}
-
 // last_assistant_message may be a plain string or an array of content blocks.
 // Measure the text either way, not the JSON literal.
 function messageLength(m) {
@@ -185,7 +199,7 @@ async function main() {
 
   quiet(() => fs.mkdirSync(LOG_DIR, { recursive: true }));
   quiet(() => fs.mkdirSync(STATE_DIR, { recursive: true }));
-  sweepStaleStarts();
+  pruneStale(STATE_DIR, PRUNE_RULES);
 
   const event = input.hook_event_name || '';
   const session = input.session_id || 'unknown';

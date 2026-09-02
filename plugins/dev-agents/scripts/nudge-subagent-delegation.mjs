@@ -38,7 +38,13 @@ const WRITE_REPEAT = 10; // and every N after that
 // -----------------------------------------------------------------------------
 
 const STATE_DIR = path.join(os.tmpdir(), 'claude-context-offload');
-const STALE_MS = 24 * 60 * 60 * 1000;
+
+const HOUR = 60 * 60 * 1000;
+const PRUNE_RULES = [
+  { suffix: '.streak', ttlMs: 24 * HOUR },
+  { suffix: '.count', ttlMs: 24 * HOUR },
+  { suffix: '.tmp', ttlMs: 24 * HOUR },
+];
 
 // --- shared:readStdin --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
 // Two deadlines on purpose. The idle timer covers the common case of a stream
@@ -94,6 +100,32 @@ function quiet(fn) {
 }
 // --- /shared:quiet ---
 
+// --- shared:pruneStale --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
+// Per-rule TTLs, because a subagent start marker is stale after hours while a
+// session flag is not. A rule matches on prefix, on suffix, or on both: the
+// files in this directory are named both ways, `has-plan-<session>.flag` from
+// the front and `<session>.streak` from the back, so prefix-only matching
+// cannot express every owner. Nothing here may throw: a hook that died during
+// housekeeping would drop the work it was actually called to do.
+function pruneStale(stateDir, rules) {
+  quiet(() => {
+    const now = Date.now();
+    for (const name of fs.readdirSync(stateDir)) {
+      const rule = rules.find(
+        (r) =>
+          (r.prefix === undefined || name.startsWith(r.prefix)) &&
+          (r.suffix === undefined || name.endsWith(r.suffix))
+      );
+      if (!rule) continue;
+      const p = path.join(stateDir, name);
+      quiet(() => {
+        if (now - fs.statSync(p).mtimeMs > rule.ttlMs) fs.unlinkSync(p);
+      });
+    }
+  });
+}
+// --- /shared:pruneStale ---
+
 // --- shared:atomicWrite --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
 // Write to a unique temp name, then rename over the target. rename is atomic
 // on POSIX and near enough on NTFS, so a concurrent reader sees either the old
@@ -140,19 +172,6 @@ function atomicWrite(file, text) {
 }
 // --- /shared:atomicWrite ---
 
-function sweepStale() {
-  quiet(() => {
-    const cutoff = Date.now() - STALE_MS;
-    for (const name of fs.readdirSync(STATE_DIR)) {
-      if (!/\.(streak|count)$/.test(name)) continue;
-      const p = path.join(STATE_DIR, name);
-      quiet(() => {
-        if (fs.statSync(p).mtimeMs < cutoff) fs.unlinkSync(p);
-      });
-    }
-  });
-}
-
 async function main() {
   const raw = await readStdin();
   let input;
@@ -174,7 +193,7 @@ async function main() {
   const safeId = session.replace(/[^a-zA-Z0-9_-]/g, '_');
 
   quiet(() => fs.mkdirSync(STATE_DIR, { recursive: true }));
-  sweepStale();
+  pruneStale(STATE_DIR, PRUNE_RULES);
   const stateFile = path.join(STATE_DIR, `${safeId}.streak`);
 
   let mode;

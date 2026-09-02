@@ -184,6 +184,41 @@ test('background reminder and unbounded reminder can both attach to the task-pla
   assert.doesNotMatch(out.hookSpecificOutput.additionalContext, /unbounded scope/);
 });
 
+test('prune deletes a stale flag and leaves a fresh one alone', () => {
+  const stale = newSession('prune-stale');
+  const fresh = newSession('prune-fresh');
+  const staleFlag = flagFor(stale);
+  const freshFlag = flagFor(fresh);
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  fs.writeFileSync(staleFlag, '1');
+  fs.writeFileSync(freshFlag, '1');
+  // Backdate one flag past the 24h TTL.
+  const old = Date.now() - 25 * 60 * 60 * 1000;
+  fs.utimesSync(staleFlag, old / 1000, old / 1000);
+
+  // A .tmp orphan older than 24h should be collected by the same sweep, the
+  // case Task 4's atomicWrite can leave behind when every rename attempt and
+  // the final cleanup all fail.
+  const staleTmp = path.join(STATE_DIR, `orphan-${stale}.tmp`);
+  const freshTmp = path.join(STATE_DIR, `orphan-${fresh}.tmp`);
+  fs.writeFileSync(staleTmp, '1');
+  fs.writeFileSync(freshTmp, '1');
+  fs.utimesSync(staleTmp, old / 1000, old / 1000);
+
+  // Any track-task-plan run prunes as a side effect.
+  createPlan(newSession('prune-trigger'));
+  assert.equal(fs.existsSync(staleFlag), false, 'the 25h-old flag should be gone');
+  assert.equal(fs.existsSync(freshFlag), true, 'the fresh flag must survive');
+  assert.equal(fs.existsSync(staleTmp), false, 'the 25h-old .tmp orphan should be gone');
+  assert.equal(fs.existsSync(freshTmp), true, 'the fresh .tmp file must survive');
+
+  try {
+    fs.unlinkSync(freshTmp);
+  } catch {
+    /* already gone */
+  }
+});
+
 test('unparseable stdin is ignored by both hooks', () => {
   for (const script of [TRACK, REQUIRE]) {
     const p = spawnSync(process.execPath, [script], { input: 'not json', encoding: 'utf8' });
