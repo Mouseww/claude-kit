@@ -542,7 +542,7 @@ test('telemetry: never breaks the hook even if the log directory cannot be creat
   });
 });
 
-test('a stream that never stops producing is cut off by the absolute deadline', async () => {
+test('a stream that never stops producing is cut off by the absolute deadline', { timeout: 20000 }, async () => {
   const { spawn } = await import('node:child_process');
   const p = spawn(process.execPath, [SCRIPT], { stdio: ['pipe', 'pipe', 'pipe'] });
   // Keep writing forever, faster than the 5s idle timer, so only the absolute
