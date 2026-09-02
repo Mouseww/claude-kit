@@ -104,10 +104,11 @@ function atomicWrite(file, text) {
   try {
     fs.unlinkSync(tmp);
   } catch {
-    /* A failed cleanup leaves at most one orphaned .tmp beside the target. That
-       bound is the reason the name is computed once and reused across attempts
-       rather than regenerated per attempt, which would allow up to three. These
-       live in the OS temp directory and nothing here tracks them further. */
+    /* Reached only when all three rename attempts failed and this cleanup failed
+       too, which leaves one orphaned .tmp beside the target. That bound of one is
+       why the name is computed once and reused across attempts rather than
+       regenerated each time, which would allow up to three. Nothing here tracks
+       or removes them afterwards. */
   }
   try {
     fs.writeFileSync(file, text);
