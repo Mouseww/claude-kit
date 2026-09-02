@@ -542,7 +542,7 @@ test('telemetry: never breaks the hook even if the log directory cannot be creat
   });
 });
 
-test('a stream that never stops producing is cut off by the absolute deadline', { timeout: 20000 }, async () => {
+test('a stream that never stops producing is cut off by the absolute deadline', { timeout: 20000 }, async (t) => {
   const { spawn } = await import('node:child_process');
   const p = spawn(process.execPath, [SCRIPT], { stdio: ['pipe', 'pipe', 'pipe'] });
   // Keep writing forever, faster than the 5s idle timer, so only the absolute
@@ -550,9 +550,21 @@ test('a stream that never stops producing is cut off by the absolute deadline', 
   const pump = setInterval(() => {
     if (!p.stdin.destroyed) p.stdin.write('x'.repeat(1024));
   }, 200);
+  // Registered before the first await, and run however the test ends. Without
+  // this, a regression that removes the absolute deadline makes the test time
+  // out correctly and then leaves the child and this interval holding the
+  // runner's event loop open, so CI stalls on the job timeout instead of
+  // reporting the failure it just detected.
+  t.after(() => {
+    clearInterval(pump);
+    try {
+      p.kill();
+    } catch {
+      /* already gone */
+    }
+  });
   const started = Date.now();
   const code = await new Promise((resolve) => p.on('close', resolve));
-  clearInterval(pump);
   const elapsed = Date.now() - started;
   assert.equal(code, 0, 'the hook must always exit 0');
   assert.ok(elapsed < 15000, `expected the absolute deadline to fire, took ${elapsed}ms`);
