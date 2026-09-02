@@ -120,6 +120,7 @@ const MAX_CHARS_MIN = Math.min(MAX_CHARS_FAILURE, MAX_CHARS_CLEAN, ADVICE_MIN_CH
 const LOG_FILE =
   process.env.CONTEXT_TRIM_METRICS_FILE || path.join(os.homedir(), '.claude', 'context-offload-metrics.jsonl');
 
+// --- shared:quiet --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
 function quiet(fn) {
   try {
     return fn();
@@ -127,6 +128,7 @@ function quiet(fn) {
     return undefined;
   }
 }
+// --- /shared:quiet ---
 
 // Heuristic, NOT reliable JSON detection: a log line like "[2026-08-13] build
 // started" false-positives here. It has exactly two permitted uses.

@@ -56,6 +56,7 @@ function readStdin() {
   });
 }
 
+// --- shared:quiet --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
 function quiet(fn) {
   try {
     return fn();
@@ -63,6 +64,7 @@ function quiet(fn) {
     return undefined;
   }
 }
+// --- /shared:quiet ---
 
 async function main() {
   const raw = await readStdin();

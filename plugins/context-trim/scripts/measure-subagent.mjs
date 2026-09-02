@@ -69,6 +69,7 @@ function readStdin() {
   });
 }
 
+// --- shared:quiet --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
 function quiet(fn) {
   try {
     return fn();
@@ -76,6 +77,7 @@ function quiet(fn) {
     return undefined;
   }
 }
+// --- /shared:quiet ---
 
 function log(obj) {
   quiet(() => fs.appendFileSync(LOG_FILE, JSON.stringify(obj) + '\n'));

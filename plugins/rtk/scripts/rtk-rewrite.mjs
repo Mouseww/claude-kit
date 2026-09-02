@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 
 const TIMEOUT_MS = 5000;
 
+// --- shared:quiet --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
 function quiet(fn) {
   try {
     return fn();
@@ -32,6 +33,7 @@ function quiet(fn) {
     return undefined;
   }
 }
+// --- /shared:quiet ---
 
 function readStdin() {
   return new Promise((resolve) => {
