@@ -280,3 +280,92 @@ test('a plugin.json "hooks" key set to a number is reported, not thrown', () => 
   assert.match(r.out, /"hooks" must be a string or an array of strings/);
   assert.match(r.out, /FAIL:/);
 });
+
+test('a plugin.json "hooks" array containing a number is reported through FAIL, not thrown', () => {
+  writeMarketplace();
+  const pluginDir = path.join(dir, 'plugins', 'test-pack');
+  fs.mkdirSync(path.join(pluginDir, '.claude-plugin'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, '.claude-plugin', 'plugin.json'),
+    JSON.stringify({
+      name: 'test-pack',
+      version: '1.0.0',
+      description: 'x'.repeat(50),
+      license: 'MIT',
+      hooks: ['a.mjs', 5],
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /"hooks" contains a non-string entry: 5/);
+  assert.match(r.out, /FAIL:/);
+  assert.doesNotMatch(r.out, /TypeError/);
+});
+
+test('an unknown key at the hooks.json top level is reported', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  fs.mkdirSync(path.join(pluginDir, 'hooks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, 'hooks', 'hooks.json'),
+    JSON.stringify({
+      extra: true,
+      hooks: {
+        PreToolUse: [{ matcher: 'Agent', hooks: [{ type: 'command', command: 'node x.mjs' }] }],
+      },
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /top level has an unknown key "extra"/);
+});
+
+test('an unknown key in a matcher group is reported', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  fs.mkdirSync(path.join(pluginDir, 'hooks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, 'hooks', 'hooks.json'),
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [{ matcher: 'Agent', matchers: 'oops', hooks: [{ type: 'command', command: 'node x.mjs' }] }],
+      },
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /"PreToolUse" matcher group has an unknown key "matchers"/);
+});
+
+test('an unknown key in a hook item is reported', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  fs.mkdirSync(path.join(pluginDir, 'hooks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, 'hooks', 'hooks.json'),
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [{ matcher: 'Agent', hooks: [{ type: 'command', command: 'node x.mjs', description: 'oops' }] }],
+      },
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /"PreToolUse" hook item has an unknown key "description"/);
+});
+
+test('an array-shaped hooks.hooks value is reported cleanly instead of iterated as a map', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  fs.mkdirSync(path.join(pluginDir, 'hooks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, 'hooks', 'hooks.json'),
+    JSON.stringify({
+      hooks: ['not', 'a', 'map'],
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /missing top-level "hooks" object/);
+  assert.doesNotMatch(r.out, /TypeError/);
+});

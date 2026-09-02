@@ -58,6 +58,15 @@ const rel = (p) => path.relative(ROOT, p).split(path.sep).join('/');
 const err = (file, msg) => errors.push(`${rel(file)}: ${msg}`);
 const warn = (file, msg) => warnings.push(`${rel(file)}: ${msg}`);
 
+// Mirrors schemas/hooks.schema.json's additionalProperties: false at each of
+// its three object levels. The schema authors this file themselves (unlike
+// plugin.json, whose format Claude Code owns), so an unknown key here is a
+// typo, not a legitimate future field, and gets named rather than merely
+// flagged.
+const HOOKS_TOP_KEYS = new Set(['$schema', 'hooks']);
+const MATCHER_KEYS = new Set(['matcher', 'hooks']);
+const HOOK_ITEM_KEYS = new Set(['type', 'command', 'timeout']);
+
 function readJson(file) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -200,6 +209,10 @@ for (const entry of marketplace.plugins) {
   const declared = hooksKeyIsValidShape && plugin.hooks ? [].concat(plugin.hooks) : [];
 
   for (const entry of declared) {
+    if (typeof entry !== 'string' || !entry) {
+      err(manifest, `"hooks" contains a non-string entry: ${JSON.stringify(entry)}`);
+      continue;
+    }
     const hooksFile = path.resolve(dir, entry);
     if (path.resolve(standardHooks) === hooksFile) {
       err(
@@ -359,9 +372,19 @@ if (fs.existsSync(pluginsDir)) {
 
 // -----------------------------------------------------------------------------
 
+function checkUnknownKeys(obj, allowed, hooksFile, label) {
+  if (obj == null || typeof obj !== 'object' || Array.isArray(obj)) return;
+  for (const key of Object.keys(obj)) {
+    if (!allowed.has(key)) {
+      err(hooksFile, `${label} has an unknown key "${key}"`);
+    }
+  }
+}
+
 function checkHookCommands(hooks, hooksFile, pluginDir) {
+  checkUnknownKeys(hooks, HOOKS_TOP_KEYS, hooksFile, 'top level');
   const groups = hooks?.hooks;
-  if (!groups || typeof groups !== 'object') {
+  if (!groups || typeof groups !== 'object' || Array.isArray(groups)) {
     err(hooksFile, 'missing top-level "hooks" object');
     return;
   }
@@ -378,6 +401,7 @@ function checkHookCommands(hooks, hooksFile, pluginDir) {
       continue;
     }
     for (const m of matchers) {
+      checkUnknownKeys(m, MATCHER_KEYS, hooksFile, `"${event}" matcher group`);
       if (m != null && m.matcher != null && typeof m.matcher !== 'string') {
         err(hooksFile, `"${event}" matcher must be a string`);
       }
@@ -385,6 +409,7 @@ function checkHookCommands(hooks, hooksFile, pluginDir) {
         err(hooksFile, `"${event}" has a matcher group with no hooks`);
       }
       for (const h of m?.hooks ?? []) {
+        checkUnknownKeys(h, HOOK_ITEM_KEYS, hooksFile, `"${event}" hook item`);
         // The schema marks both "type" and "command" required, with "type" a
         // const "command". A typo'd type or a missing command string used to
         // be skipped silently here, so the hook never ran and nothing said why.
