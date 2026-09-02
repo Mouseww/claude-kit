@@ -214,6 +214,16 @@ function atomicWrite(file, text) {
 }
 // --- /shared:atomicWrite ---
 
+// Both reminder branches throttle the same way: fire on the first hit, then
+// every `repeatEvery`-th. Kept as one helper so the two counters cannot drift
+// into different cadences.
+function bumpCounter(file) {
+  const prev = Number(quiet(() => fs.readFileSync(file, 'utf8')) ?? 0) || 0;
+  const next = prev + 1;
+  quiet(() => atomicWrite(file, String(next)));
+  return next;
+}
+
 async function main() {
   const raw = await readStdin();
   let input;
@@ -266,11 +276,7 @@ async function main() {
   // A plan exists: skip the plan reminder, but still emit anything collected above.
   if (!hasPlan) {
     const countFile = path.join(STATE_DIR, `nudged-${session}.count`);
-
-    const saved = quiet(() => fs.readFileSync(countFile, 'utf8').trim());
-    const seen = saved && /^\d+$/.test(saved) ? Number(saved) : 0;
-    const n = seen + 1;
-    quiet(() => atomicWrite(countFile, String(n)));
+    const n = bumpCounter(countFile);
 
     // Fire on the first planless dispatch, then every REPEAT_EVERY after it.
     if (n === 1 || n % REPEAT_EVERY === 0) parts.push(MESSAGE);
@@ -286,10 +292,7 @@ async function main() {
     const remaining = formatRemaining(readPlan(STATE_DIR, session));
     if (remaining) {
       const echoCountFile = path.join(STATE_DIR, `plan-echoed-${session}.count`);
-      const savedEcho = quiet(() => fs.readFileSync(echoCountFile, 'utf8').trim());
-      const seenEcho = savedEcho && /^\d+$/.test(savedEcho) ? Number(savedEcho) : 0;
-      const nEcho = seenEcho + 1;
-      quiet(() => atomicWrite(echoCountFile, String(nEcho)));
+      const nEcho = bumpCounter(echoCountFile);
       if (nEcho === 1 || nEcho % REPEAT_EVERY === 0) {
         parts.push(
           `[dev-agents] Remaining steps in the persisted task plan:\n${remaining}\n\nMark each one completed as you finish it. If this list is stale, the plan on disk is the record; update it rather than working from memory.`

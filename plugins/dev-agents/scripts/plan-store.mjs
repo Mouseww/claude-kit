@@ -46,9 +46,20 @@ export function readPlan(stateDir, session) {
 }
 
 // mutate(current) returns { steps, raw }. current is the record on disk, or a
-// blank one at revision 0 when there is none. The write only lands if the
-// on-disk revision has not moved since mutate was called; otherwise it retries
-// with the fresher copy, and gives up with reason 'revision-conflict'.
+// blank one at revision 0 when there is none.
+//
+// The revision check NARROWS the clobber window; it does not close it. A writer
+// that reads revision N, is beaten to the disk by another writer, and only then
+// tries to write, is correctly rejected and retries — that is the "late arrival"
+// case this exists for, and it is the one that actually happens when a long
+// subagent returns after the plan moved on. What is NOT prevented: two writers
+// that both read N and both pass the re-read before either renames. The second
+// rename wins silently. Closing that would need an exclusive per-revision claim,
+// and an orphaned claim from a crashed hook would wedge the store until the 24h
+// prune collected it, which is a worse failure than a lost update. Both callers
+// today derive their payload from the same tool_input, so a lost simultaneous
+// write costs nothing; a future caller with a genuinely independent payload
+// should not assume this is a lock.
 export function writePlan(stateDir, session, mutate, maxRetries = 3) {
   const file = planPath(stateDir, session);
   for (let attempt = 0; attempt < maxRetries; attempt++) {
