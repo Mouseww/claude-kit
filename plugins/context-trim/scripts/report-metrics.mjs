@@ -87,7 +87,12 @@ console.log('');
 // or the tagged shape measure-subagent.mjs now writes ('stop_unattributed').
 // Pull both out before the per-agent table is built, or they render as a
 // top-row agent named "unknown" that reads like real subagent activity.
-const allStops = records.filter((r) => r.event === 'stop' || r.event === 'stop_unattributed');
+// A marker (oversized: true) is a tombstone for a dropped record, not a real
+// stop/usage row: it carries only event/agent/session, so reading duration_s,
+// returned_chars, or usage off it would fabricate a phantom entry. Excluded
+// here so every table derived from allStops/stops stays clean without each
+// derived filter needing its own guard.
+const allStops = records.filter((r) => (r.event === 'stop' || r.event === 'stop_unattributed') && r.oversized !== true);
 const unattributed = allStops.filter(
   (r) => r.event === 'stop_unattributed' || ((r.agent == null || r.agent === 'unknown') && r.duration_s == null)
 );
@@ -165,7 +170,10 @@ console.log(
 // probe several spellings rather than assuming one. Declared here (ahead of
 // the "Real usage" section that formats it) so the stall check below can join
 // against it too.
-const usages = records.filter((r) => r.event === 'agent_usage');
+// Same tombstone exclusion as allStops above: a marker never carries the
+// `usage` payload, so leaving it in would map to a phantom t:'unknown',
+// tok:0, ms:0 row in the grouped Real-usage table below.
+const usages = records.filter((r) => r.event === 'agent_usage' && r.oversized !== true);
 // agent_usage.usage carries the raw PostToolUse tool_response, and agentId is
 // how it lines up with a stop record's agent_id -- neither subagent_type nor
 // session_id is unique enough per-call to do this join safely.

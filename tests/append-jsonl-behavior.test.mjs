@@ -99,6 +99,37 @@ test('a record above the cap is written as a marker, not as itself, and returns 
   assert.notDeepEqual(written, record);
 });
 
+// F2 proof: a whitelisted string field over the 120-char limit must not ride
+// through into the marker, or a control-character-heavy value could still
+// push the marker itself close to the cap.
+test('a whitelisted field longer than 120 characters is dropped from the marker, and the marker stays under the cap', () => {
+  const calls = [];
+  const fsDouble = {
+    mkdirSync: (...args) => calls.push(['mkdirSync', ...args]),
+    appendFileSync: (...args) => calls.push(['appendFileSync', ...args]),
+  };
+  const pathDouble = { dirname: (f) => f.split('/').slice(0, -1).join('/') || '.' };
+  const appendJsonl = makeAppendJsonl(fsDouble, pathDouble);
+
+  const longSession = 's'.repeat(121); // one over the 120-char limit
+  const bigUsage = { agentId: 'a1', blob: 'x'.repeat(5000) };
+  const record = { event: 'agent_usage', session: longSession, usage: bigUsage };
+  const result = appendJsonl('/log/metrics.jsonl', record);
+
+  assert.equal(result, false);
+  const writeCall = calls.find((c) => c[0] === 'appendFileSync');
+  assert.ok(writeCall, 'expected an appendFileSync call for the marker');
+  const writtenLine = writeCall[2];
+  const written = JSON.parse(writtenLine);
+
+  assert.equal(written.oversized, true);
+  assert.equal('session' in written, false, 'a field over 120 chars must be absent from the marker, not truncated in place');
+  assert.ok(
+    Buffer.byteLength(writtenLine, 'utf8') <= 4000,
+    `expected the marker itself to stay under the 4000-byte cap, got ${Buffer.byteLength(writtenLine, 'utf8')}`
+  );
+});
+
 test('a record exactly at the cap is written as itself', () => {
   const calls = [];
   const fsDouble = {

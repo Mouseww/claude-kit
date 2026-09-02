@@ -221,3 +221,23 @@ test('an oversized marker in the log produces the oversized-record note; a clean
   ]);
   assert.doesNotMatch(clean, /oversized record/);
 });
+
+// This is the assertion that would have caught F1: an oversized agent_usage
+// marker has no subagent_type and no usage payload, so admitting it into the
+// grouped Real-usage table fabricates a phantom "unknown" row with 0 tokens
+// and 0 duration -- a fake row standing in for a lost one, which is exactly
+// the corruption the marker was supposed to prevent.
+test('an oversized agent_usage marker is excluded from the Real-usage table, while a normal agent_usage row is not', () => {
+  const out = run([
+    {
+      ts: ts(),
+      event: 'agent_usage',
+      subagent_type: 'dev-agents:quick-read',
+      usage: { agentId: 'a1', totalTokens: 500, totalDurationMs: 5000 },
+    },
+    { oversized: true, orig_bytes: 5027, event: 'agent_usage', session: 's1' },
+  ]);
+  const section = out.split('== Real usage')[1] ?? '';
+  assert.match(section, /dev-agents:quick-read\s+x1/, 'the normal agent_usage row must still be counted');
+  assert.doesNotMatch(section, /\bunknown\s+x1\b/, 'the marker must not fabricate a phantom "unknown" row');
+});

@@ -121,11 +121,15 @@ function appendJsonl(file, record) {
         return true;
       }
       // Carry only small scalars through, so the marker itself cannot be
-      // oversized in turn.
+      // oversized in turn. The 120-char limit (not 200) matters here: a
+      // control character in the string escapes to `\u00XX` in JSON, a
+      // sixfold blowup, so three unlucky 200-char fields could still put the
+      // marker within a few hundred bytes of the cap. 120 leaves real
+      // headroom even at that worst case.
       const marker = { oversized: true, orig_bytes: size };
       for (const key of ['event', 'agent', 'session']) {
         const v = record?.[key];
-        if (typeof v === 'string' && v.length <= 200) marker[key] = v;
+        if (typeof v === 'string' && v.length <= 120) marker[key] = v;
         else if (typeof v === 'number') marker[key] = v;
       }
       fs.appendFileSync(file, JSON.stringify(marker) + '\n');
