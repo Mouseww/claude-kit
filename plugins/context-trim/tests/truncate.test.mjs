@@ -545,6 +545,12 @@ test('telemetry: never breaks the hook even if the log directory cannot be creat
 test('a stream that never stops producing is cut off by the absolute deadline', { timeout: 20000 }, async (t) => {
   const { spawn } = await import('node:child_process');
   const p = spawn(process.execPath, [SCRIPT], { stdio: ['pipe', 'pipe', 'pipe'] });
+  // The pump can still be mid-write when the child exits on the healthy path,
+  // and a write to a pipe with no reader raises EPIPE. p.stdin.destroyed is
+  // false at that moment -- the stream object outlives the pipe -- so the pump's
+  // own guard cannot see it. Swallow it: losing the reader during teardown is
+  // the expected end of this test, not a failure of it.
+  p.stdin.on('error', () => {});
   // Keep writing forever, faster than the 5s idle timer, so only the absolute
   // deadline can end this. Never send 'end'.
   const pump = setInterval(() => {
