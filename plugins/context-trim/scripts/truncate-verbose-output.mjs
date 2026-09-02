@@ -229,11 +229,12 @@ const FALSE_POSITIVES = [
   /failures: 0/g,
 ];
 
-// Idle timeout, not an absolute one: an absolute cutoff would truncate a large
-// but still-flowing Bash payload mid-stream. Every chunk resets the timer;
-// only 5s with no data AND no `end` resolves the buffer collected so far. A
-// partial buffer that fails downstream JSON.parse falls through the existing
-// fail-open path.
+// The one call site in this repo that passes an absolute deadline: 8000ms
+// against this hook's 10s budget. A stream that keeps producing resets the
+// idle timer forever, so without the absolute cutoff this read would never
+// resolve. Cutting mid-stream is safe here: a partial body fails
+// JSON.parse, and the caller passes the output through unchanged on that
+// failure, so the worst case is skipping truncation, not corrupting data.
 // --- shared:readStdin --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
 // Two deadlines on purpose. The idle timer covers the common case of a stream
 // that goes quiet without an end event. The absolute one covers a stream that

@@ -60,34 +60,42 @@ for (const [name, owners] of Object.entries(HELPER_OWNERS)) {
   });
 }
 
-test('no script carries an unregistered shared: block', () => {
-  const registered = new Set(Object.keys(HELPER_OWNERS));
+// Scans plugins/ (the installable packs) and templates/ (the scaffold new
+// packs are cloned from) for shared: marker blocks. A drift-free template is
+// the whole point of F2: a pack scaffolded from a stale template must not
+// reintroduce a hazard this branch already fixed.
+function findScripts(dir) {
   const scripts = [];
-  const walk = (dir) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const p = path.join(dir, entry.name);
+  const walk = (d) => {
+    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, entry.name);
       if (entry.isDirectory()) walk(p);
       else if (entry.name.endsWith('.mjs')) scripts.push(p);
     }
   };
-  walk(path.join(ROOT, 'plugins'));
+  walk(dir);
+  return scripts;
+}
+
+test('no script carries an unregistered shared: block, and every marker is registered to the file it is found in', () => {
+  const registered = new Set(Object.keys(HELPER_OWNERS));
+  const scripts = [
+    ...findScripts(path.join(ROOT, 'plugins')),
+    ...findScripts(path.join(ROOT, 'templates')),
+  ];
   for (const file of scripts) {
     const text = fs.readFileSync(file, 'utf8');
+    const relPath = path.relative(ROOT, file).split(path.sep).join('/');
     for (const m of text.matchAll(/\/\/ --- shared:([a-zA-Z][a-zA-Z0-9]*) ---/g)) {
+      const name = m[1];
       assert.ok(
-        registered.has(m[1]),
-        `${path.relative(ROOT, file)} declares shared:${m[1]} which is not in HELPER_OWNERS`
+        registered.has(name),
+        `${relPath} declares shared:${name} which is not in HELPER_OWNERS`
       );
-    }
-  }
-});
-
-test('every registered owner path actually exists', () => {
-  for (const [name, owners] of Object.entries(HELPER_OWNERS)) {
-    for (const relPath of owners) {
       assert.ok(
-        fs.existsSync(path.join(ROOT, relPath)),
-        `HELPER_OWNERS.${name} lists ${relPath} which does not exist; a rename left the registry stale`
+        HELPER_OWNERS[name]?.includes(relPath),
+        `${relPath} carries a shared:${name} block but is not listed in HELPER_OWNERS.${name}. ` +
+          `Add "${relPath}" to HELPER_OWNERS.${name} in tests/hook-helpers.mjs.`
       );
     }
   }

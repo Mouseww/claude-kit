@@ -22,6 +22,7 @@ export const HELPER_OWNERS = {
     'plugins/context-trim/scripts/truncate-verbose-output.mjs',
     'plugins/context-trim/scripts/measure-subagent.mjs',
     'plugins/rtk/scripts/rtk-rewrite.mjs',
+    'templates/plugin-template/scripts/example-hook.mjs',
   ],
   readStdin: [
     'plugins/dev-agents/scripts/require-task-plan.mjs',
@@ -34,6 +35,7 @@ export const HELPER_OWNERS = {
     'plugins/context-trim/scripts/measure-subagent.mjs',
     'plugins/claude-kit-meta/scripts/check-daily-update.mjs',
     'plugins/rtk/scripts/rtk-rewrite.mjs',
+    'templates/plugin-template/scripts/example-hook.mjs',
   ],
   atomicWrite: [
     'plugins/dev-agents/scripts/require-task-plan.mjs',
