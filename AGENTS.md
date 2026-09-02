@@ -69,6 +69,37 @@ what is easy to get wrong.
   `nesting-discipline`, so do not delete that check as unfounded. An explicit
   `tools:` list is an allowlist, so omitting `Skill` only stops the agent
   loading *other* skills at run time; the preloaded ones are already present.
+- `pruneStale` takes rules shaped `{ prefix?, suffix?, ttlMs }` rather than a plain
+  prefix list, because the files in the shared state directory are named from both
+  ends: `has-plan-<session>.flag` from the front and `<session>.streak` from the
+  back. Prefix-only matching cannot express the second, which is how the original
+  sweep in `nudge-subagent-delegation.mjs` worked. A rule with neither field is
+  ignored rather than treated as a wildcard, because that directory is shared and
+  a wildcard would delete other packs' state. The `.tmp` rule is deliberately
+  FIRST in every table: `rules.find` returns the first match, and an orphan named
+  `start-<key>.<pid>.<ts>.tmp` would otherwise be collected on the 12 hour
+  `start-` schedule instead of the 24 hour orphan schedule. A test in
+  `plugins/context-trim/tests/` pins that ordering by backdating a file 18 hours,
+  past one TTL and short of the other, so it passes only while `.tmp` matches
+  first. Do not reorder these tables.
+- A JSONL record over the cap is written as a MARKER, not dropped. `appendJsonl`
+  caps a line at 4000 bytes because an O_APPEND write is atomic only below
+  PIPE_BUF, and an oversized record could interleave with another process's
+  append to produce a line neither wrote. Rather than lose it silently, it writes
+  `{ oversized: true, orig_bytes, ... }` carrying only whitelisted small scalars,
+  and `report-metrics.mjs` counts those and says so. The per-field limit is 120
+  characters, not 200, because three fields of 200 can each grow sixfold when
+  control characters escape to `\uXXXX`, which put the marker within about 300
+  bytes of the cap it exists to respect. A marker is a tombstone: it belongs in
+  the loss count and nowhere else, so every site that filters by `event` and then
+  reads a payload field also filters `r.oversized !== true`, or the marker becomes
+  a phantom zero-valued row in the per-agent table.
+- `track-task-plan.mjs` matches `TaskCreate|TodoWrite`, not just `TaskCreate`.
+  Different harness builds expose the plan-creating tool under different names,
+  and matching only one means the plan record is never written at all on the other.
+  The script gates on a `PLAN_TOOLS` set that must stay in step with the matcher
+  in `hooks/hooks.json`: a mismatch means the hook either fires and does nothing
+  or never fires.
 - `readStdin` carries two deadlines. The idle one (5s) covers a stream that
   goes quiet without an end event; the absolute one covers a stream that keeps
   producing, which resets the idle timer forever and used to mean the read
