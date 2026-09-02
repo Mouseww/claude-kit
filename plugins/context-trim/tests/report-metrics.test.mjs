@@ -23,10 +23,11 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(HERE, '..', 'scripts', 'report-metrics.mjs');
+const { parseMetricsLines } = await import(pathToFileURL(SCRIPT).href);
 
 /** Write `records` (one JSON object each) to a fresh tmp .jsonl file and
  *  return its path. Caller is responsible for cleanup via cleanup(). */
@@ -183,4 +184,15 @@ test('the per-agent table header shows p50/p90/max and no longer shows avg', () 
   assert.match(out, /p90 s/);
   assert.match(out, /max s/);
   assert.doesNotMatch(out, /avg sec/);
+});
+
+test('a torn JSONL line is skipped instead of crashing the report', () => {
+  const rows = [
+    JSON.stringify({ event: 'stop', agent: 'dev-agents:quick-read', duration_s: 3 }),
+    '{"event":"stop","agent":"dev-agents:quick-io","dur',
+    JSON.stringify({ event: 'stop', agent: 'dev-agents:quick-read', duration_s: 5 }),
+  ].join('\n');
+  const parsed = parseMetricsLines(rows);
+  assert.equal(parsed.rows.length, 2, 'both intact rows should survive');
+  assert.equal(parsed.skipped, 1, 'the torn line should be counted, not thrown');
 });

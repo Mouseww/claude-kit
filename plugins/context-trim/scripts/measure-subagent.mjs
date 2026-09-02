@@ -101,6 +101,26 @@ function quiet(fn) {
 }
 // --- /shared:quiet ---
 
+// --- shared:appendJsonl --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
+// One write call, one line, capped. An O_APPEND write is atomic only below
+// PIPE_BUF (4096), so a record larger than the cap could interleave with
+// another process's append and produce a line neither of them wrote. Dropping
+// an oversized telemetry record is strictly better than corrupting the log,
+// and parseMetricsLines in report-metrics.mjs skips whatever slips through.
+const JSONL_MAX_BYTES = 4000;
+function appendJsonl(file, record) {
+  return (
+    quiet(() => {
+      const line = JSON.stringify(record) + '\n';
+      if (Buffer.byteLength(line, 'utf8') > JSONL_MAX_BYTES) return false;
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.appendFileSync(file, line);
+      return true;
+    }) ?? false
+  );
+}
+// --- /shared:appendJsonl ---
+
 // --- shared:pruneStale --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
 // Per-rule TTLs, because a subagent start marker is stale after hours while a
 // session flag is not. A rule matches on prefix, on suffix, or on both: the
@@ -177,7 +197,7 @@ function atomicWrite(file, text) {
 // --- /shared:atomicWrite ---
 
 function log(obj) {
-  quiet(() => fs.appendFileSync(LOG_FILE, JSON.stringify(obj) + '\n'));
+  appendJsonl(LOG_FILE, obj);
 }
 
 // last_assistant_message may be a plain string or an array of content blocks.

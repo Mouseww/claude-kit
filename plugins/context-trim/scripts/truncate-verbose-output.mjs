@@ -130,6 +130,26 @@ function quiet(fn) {
 }
 // --- /shared:quiet ---
 
+// --- shared:appendJsonl --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
+// One write call, one line, capped. An O_APPEND write is atomic only below
+// PIPE_BUF (4096), so a record larger than the cap could interleave with
+// another process's append and produce a line neither of them wrote. Dropping
+// an oversized telemetry record is strictly better than corrupting the log,
+// and parseMetricsLines in report-metrics.mjs skips whatever slips through.
+const JSONL_MAX_BYTES = 4000;
+function appendJsonl(file, record) {
+  return (
+    quiet(() => {
+      const line = JSON.stringify(record) + '\n';
+      if (Buffer.byteLength(line, 'utf8') > JSONL_MAX_BYTES) return false;
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.appendFileSync(file, line);
+      return true;
+    }) ?? false
+  );
+}
+// --- /shared:appendJsonl ---
+
 // Heuristic, NOT reliable JSON detection: a log line like "[2026-08-13] build
 // started" false-positives here. It has exactly two permitted uses.
 //
@@ -164,8 +184,7 @@ function emitTelemetry({ toolName, sessionId, path: takenPath, origLen, finalLen
       err_lines_omitted: errLinesOmitted || 0,
       looks_structured: looksStructured(source),
     };
-    fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true });
-    fs.appendFileSync(LOG_FILE, JSON.stringify(entry) + '\n');
+    appendJsonl(LOG_FILE, entry);
   });
 }
 

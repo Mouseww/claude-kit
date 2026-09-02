@@ -28,7 +28,31 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
+// A crashed session can leave a half-written line, and a torn line is also
+// possible in normal operation: several subagents append to this log at once
+// and a record over PIPE_BUF can interleave. appendJsonl in the writers caps
+// the line to make that rare, and parseMetricsLines makes it harmless when it
+// happens anyway. Parsing the whole file at once would fail on all of it and
+// every table below would silently come back empty, so filter to parseable
+// lines first and say how many were dropped.
+export function parseMetricsLines(text) {
+  const rows = [];
+  let skipped = 0;
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      rows.push(JSON.parse(trimmed));
+    } catch {
+      skipped += 1;
+    }
+  }
+  return { rows, skipped };
+}
+
+function runReport() {
 const LOG = process.argv[2] || path.join(os.homedir(), '.claude', 'context-offload-metrics.jsonl');
 
 // A run has to clear BOTH a floor and a multiple of its own agent's median to
@@ -47,19 +71,7 @@ if (!fs.existsSync(LOG)) {
   process.exit(1);
 }
 
-// A crashed session can leave a half-written line. Parsing the whole file at
-// once would fail on all of it and every table below would silently come back
-// empty, so filter to parseable lines first and say how many were dropped.
-const lines = fs.readFileSync(LOG, 'utf8').split('\n').filter((l) => l.trim() !== '');
-const records = [];
-let malformed = 0;
-for (const line of lines) {
-  try {
-    records.push(JSON.parse(line));
-  } catch {
-    malformed++;
-  }
-}
+const { rows: records, skipped: malformed } = parseMetricsLines(fs.readFileSync(LOG, 'utf8'));
 
 console.log(`Metrics log: ${LOG}`);
 console.log(
@@ -286,3 +298,12 @@ console.log('');
 console.log(
   'Note: let this run for a few days. A single sample means nothing; look at trends and relative size.'
 );
+
+if (malformed > 0) {
+  console.log(`note: skipped ${malformed} malformed log line(s)`);
+}
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+  runReport();
+}

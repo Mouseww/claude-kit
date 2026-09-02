@@ -48,6 +48,10 @@ export const HELPER_OWNERS = {
     'plugins/dev-agents/scripts/nudge-subagent-delegation.mjs',
     'plugins/context-trim/scripts/measure-subagent.mjs',
   ],
+  appendJsonl: [
+    'plugins/context-trim/scripts/measure-subagent.mjs',
+    'plugins/context-trim/scripts/truncate-verbose-output.mjs',
+  ],
 };
 
 // Returns the marker block including both marker lines, or null when absent.
