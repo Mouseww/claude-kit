@@ -1,4 +1,5 @@
 {
+  "$schema": "../../../schemas/hooks.schema.json",
   "hooks": {
     "UserPromptSubmit": [
       {

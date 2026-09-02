@@ -1,4 +1,5 @@
 {
+  "$schema": "../../../schemas/plugin.schema.json",
   "name": "code-graph",
   "version": "1.0.0",
   "defaultEnabled": false,

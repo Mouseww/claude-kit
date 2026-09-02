@@ -128,3 +128,57 @@ test('a SKILL.md with a malformed (non-list) skills: value does not crash and is
   assert.equal(r.status, 0, r.out);
   assert.equal(r.out.includes('skill-malformed'), false);
 });
+
+test('a plugin.json with a non-semver version is reported', () => {
+  writeMarketplace();
+  const pluginDir = path.join(dir, 'plugins', 'test-pack');
+  fs.mkdirSync(path.join(pluginDir, '.claude-plugin'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, '.claude-plugin', 'plugin.json'),
+    JSON.stringify({
+      name: 'test-pack',
+      version: '1.2',
+      description: 'x'.repeat(50),
+      license: 'MIT',
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /version "1\.2" is not/);
+});
+
+test('a hooks.json timeout above the ceiling is reported', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  fs.mkdirSync(path.join(pluginDir, 'hooks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, 'hooks', 'hooks.json'),
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          { matcher: 'Agent', hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/x.mjs"', timeout: 9999 }] },
+        ],
+      },
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /timeout 9999/);
+});
+
+test('a hook command that does not start with node is reported', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  fs.mkdirSync(path.join(pluginDir, 'hooks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, 'hooks', 'hooks.json'),
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [{ matcher: 'Agent', hooks: [{ type: 'command', command: 'python x.py' }] }],
+      },
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /does not start with "node"/);
+});

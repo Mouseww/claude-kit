@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://claude-kit.local/schemas/plugin.schema.json",
+  "title": "claude-kit plugin manifest",
+  "description": "Shape of plugins/<name>/.claude-plugin/plugin.json. Mirrored by scripts/validate.mjs, which is the enforcing copy.",
+  "type": "object",
+  "required": ["name", "version", "description", "license"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "Must equal the directory name and the marketplace.json entry name."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "The only update trigger. Bump it or `claude plugin update` is a no-op."
+    },
+    "description": { "type": "string", "minLength": 40 },
+    "license": { "type": "string" },
+    "keywords": { "type": "array", "items": { "type": "string" } },
+    "defaultEnabled": { "type": "boolean" },
+    "hooks": {
+      "description": "Only for EXTRA hook files. hooks/hooks.json is auto-loaded; naming it here makes the plugin fail to load.",
+      "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+    },
+    "externalSkills": {
+      "type": "object",
+      "description": "Skills an agent references that are not shipped in this repo. Key is the skill name, value is why.",
+      "additionalProperties": { "type": "string" }
+    }
+  },
+  "additionalProperties": true
+}

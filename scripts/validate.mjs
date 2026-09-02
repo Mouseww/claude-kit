@@ -169,6 +169,7 @@ for (const entry of marketplace.plugins) {
   }
   if (!plugin.description) err(manifest, 'missing "description"');
   if (!plugin.version) warn(manifest, 'no "version"; bump it when the pack changes');
+  checkPluginManifestShape(plugin, manifest);
 
   // "externalSkills" documents skills an agent references that are not shipped
   // in this repo (they live in a user's global ~/.claude/skills or another
@@ -365,12 +366,27 @@ function checkHookCommands(hooks, hooksFile, pluginDir) {
       continue;
     }
     for (const m of matchers) {
+      if (m != null && m.matcher != null && typeof m.matcher !== 'string') {
+        err(hooksFile, `"${event}" matcher must be a string`);
+      }
+      if (!Array.isArray(m?.hooks) || m.hooks.length === 0) {
+        err(hooksFile, `"${event}" has a matcher group with no hooks`);
+      }
       for (const h of m?.hooks ?? []) {
         if (h?.type !== 'command' || typeof h.command !== 'string') continue;
 
         // Cross-platform rule: hook entry points are node scripts in this repo.
         if (/\.(sh|ps1|bat|cmd)\b/.test(h.command)) {
           err(hooksFile, `"${event}" hook invokes a shell script; this repo uses node (.mjs) entry points only`);
+        }
+
+        if (!/^node\s/.test(h.command.trim())) {
+          err(hooksFile, `"${event}" hook command does not start with "node": ${h.command}`);
+        }
+        if (h.timeout != null) {
+          if (!Number.isInteger(h.timeout) || h.timeout < 1 || h.timeout > 600) {
+            err(hooksFile, `"${event}" hook timeout ${h.timeout} must be an integer between 1 and 600`);
+          }
         }
 
         // Resolve every ${CLAUDE_PLUGIN_ROOT}-relative path it mentions and
@@ -384,6 +400,38 @@ function checkHookCommands(hooks, hooksFile, pluginDir) {
         }
       }
     }
+  }
+}
+
+// Mirrors schemas/plugin.schema.json. The schema file is for editor completion;
+// this is the copy CI actually runs, because this repo installs no dependencies
+// and therefore has no schema engine.
+function checkPluginManifestShape(plugin, manifestFile) {
+  if (plugin.version != null && !/^\d+\.\d+\.\d+$/.test(String(plugin.version))) {
+    err(manifestFile, `version "${plugin.version}" is not a bare x.y.z semver`);
+  }
+  if (plugin.name != null && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(String(plugin.name))) {
+    err(manifestFile, `name "${plugin.name}" is not lower-kebab-case`);
+  }
+  if (plugin.defaultEnabled != null && typeof plugin.defaultEnabled !== 'boolean') {
+    err(manifestFile, '"defaultEnabled" must be a boolean');
+  }
+  if (plugin.keywords != null && !Array.isArray(plugin.keywords)) {
+    err(manifestFile, '"keywords" must be an array');
+  }
+  if (plugin.externalSkills != null) {
+    if (typeof plugin.externalSkills !== 'object' || Array.isArray(plugin.externalSkills)) {
+      err(manifestFile, '"externalSkills" must be an object of name -> reason');
+    } else {
+      for (const [k, v] of Object.entries(plugin.externalSkills)) {
+        if (typeof v !== 'string' || v.length === 0) {
+          err(manifestFile, `"externalSkills.${k}" must be a non-empty string saying where it lives`);
+        }
+      }
+    }
+  }
+  if (plugin.$schema != null && plugin.$schema !== '../../../schemas/plugin.schema.json') {
+    warn(manifestFile, `"$schema" should be "../../../schemas/plugin.schema.json"`);
   }
 }
 

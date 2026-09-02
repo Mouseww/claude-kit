@@ -1,4 +1,5 @@
 {
+  "$schema": "../../../schemas/plugin.schema.json",
   "name": "rtk",
   "version": "1.0.0",
   "defaultEnabled": false,
