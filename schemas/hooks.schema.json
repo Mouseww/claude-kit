@@ -13,6 +13,7 @@
         "type": "array",
         "items": {
           "type": "object",
+          "description": "additionalProperties is false here, unlike plugin.schema.json's true: this repo authors hooks.json itself, so an unknown key is a typo, whereas a plugin manifest's format is owned by Claude Code and may legitimately gain keys this repo has not seen.",
           "required": ["hooks"],
           "properties": {
             "matcher": { "type": "string" },

@@ -57,7 +57,16 @@ function writePlugin() {
   fs.mkdirSync(path.join(pluginDir, '.claude-plugin'), { recursive: true });
   fs.writeFileSync(
     path.join(pluginDir, '.claude-plugin', 'plugin.json'),
-    JSON.stringify({ name: 'test-pack', description: 'a fixture plugin for validate.mjs tests', version: '0.0.1' }, null, 2)
+    JSON.stringify(
+      {
+        name: 'test-pack',
+        description: 'a fixture plugin for validate.mjs tests, long enough to clear the forty character minimum',
+        version: '0.0.1',
+        license: 'MIT',
+      },
+      null,
+      2
+    )
   );
   return pluginDir;
 }
@@ -181,4 +190,93 @@ test('a hook command that does not start with node is reported', () => {
   const r = run();
   assert.notEqual(r.status, 0);
   assert.match(r.out, /does not start with "node"/);
+});
+
+test('a plugin.json with no "license" is reported', () => {
+  writeMarketplace();
+  const pluginDir = path.join(dir, 'plugins', 'test-pack');
+  fs.mkdirSync(path.join(pluginDir, '.claude-plugin'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, '.claude-plugin', 'plugin.json'),
+    JSON.stringify({
+      name: 'test-pack',
+      version: '1.0.0',
+      description: 'x'.repeat(50),
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /missing "license"/);
+});
+
+test('a plugin.json with a 39-char description is reported', () => {
+  writeMarketplace();
+  const pluginDir = path.join(dir, 'plugins', 'test-pack');
+  fs.mkdirSync(path.join(pluginDir, '.claude-plugin'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, '.claude-plugin', 'plugin.json'),
+    JSON.stringify({
+      name: 'test-pack',
+      version: '1.0.0',
+      description: 'x'.repeat(39),
+      license: 'MIT',
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /"description" is 39 chars/);
+});
+
+test('a hook item with a non-"command" type is reported', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  fs.mkdirSync(path.join(pluginDir, 'hooks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, 'hooks', 'hooks.json'),
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [{ matcher: 'Agent', hooks: [{ type: 'cmd', command: 'node x.mjs' }] }],
+      },
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /has type "cmd"; only "command" is supported/);
+});
+
+test('a hook item with no "command" is reported', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  fs.mkdirSync(path.join(pluginDir, 'hooks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, 'hooks', 'hooks.json'),
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [{ matcher: 'Agent', hooks: [{ type: 'command' }] }],
+      },
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /has no "command" string/);
+});
+
+test('a plugin.json "hooks" key set to a number is reported, not thrown', () => {
+  writeMarketplace();
+  const pluginDir = path.join(dir, 'plugins', 'test-pack');
+  fs.mkdirSync(path.join(pluginDir, '.claude-plugin'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, '.claude-plugin', 'plugin.json'),
+    JSON.stringify({
+      name: 'test-pack',
+      version: '1.0.0',
+      description: 'x'.repeat(50),
+      license: 'MIT',
+      hooks: 5,
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /"hooks" must be a string or an array of strings/);
+  assert.match(r.out, /FAIL:/);
 });

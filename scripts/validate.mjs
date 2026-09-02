@@ -168,7 +168,7 @@ for (const entry of marketplace.plugins) {
     err(manifest, `"name" is "${plugin.name}" but marketplace.json lists it as "${entry.name}"`);
   }
   if (!plugin.description) err(manifest, 'missing "description"');
-  if (!plugin.version) warn(manifest, 'no "version"; bump it when the pack changes');
+  if (!plugin.version) err(manifest, 'no "version"; bump it when the pack changes');
   checkPluginManifestShape(plugin, manifest);
 
   // "externalSkills" documents skills an agent references that are not shipped
@@ -192,7 +192,12 @@ for (const entry of marketplace.plugins) {
   // Both shipped packs had this and both were dead on arrival until the CLI said
   // so. The manifest key is only for EXTRA hook files beyond the standard one.
   const standardHooks = path.join(dir, 'hooks', 'hooks.json');
-  const declared = plugin.hooks ? [].concat(plugin.hooks) : [];
+  const hooksKeyIsValidShape =
+    plugin.hooks == null || typeof plugin.hooks === 'string' || Array.isArray(plugin.hooks);
+  if (!hooksKeyIsValidShape) {
+    err(manifest, '"hooks" must be a string or an array of strings');
+  }
+  const declared = hooksKeyIsValidShape && plugin.hooks ? [].concat(plugin.hooks) : [];
 
   for (const entry of declared) {
     const hooksFile = path.resolve(dir, entry);
@@ -360,6 +365,13 @@ function checkHookCommands(hooks, hooksFile, pluginDir) {
     err(hooksFile, 'missing top-level "hooks" object');
     return;
   }
+  // Mirrors schemas/hooks.schema.json's top-level "$schema" property, the same
+  // way checkPluginManifestShape warns on plugin.json's. Without this, a
+  // hooks.json pointing at the wrong schema (or the plugin schema) is still
+  // valid JSON and nothing notices.
+  if (hooks.$schema != null && hooks.$schema !== '../../../schemas/hooks.schema.json') {
+    warn(hooksFile, `"$schema" should be "../../../schemas/hooks.schema.json"`);
+  }
   for (const [event, matchers] of Object.entries(groups)) {
     if (!Array.isArray(matchers)) {
       err(hooksFile, `"${event}" must be an array`);
@@ -373,7 +385,17 @@ function checkHookCommands(hooks, hooksFile, pluginDir) {
         err(hooksFile, `"${event}" has a matcher group with no hooks`);
       }
       for (const h of m?.hooks ?? []) {
-        if (h?.type !== 'command' || typeof h.command !== 'string') continue;
+        // The schema marks both "type" and "command" required, with "type" a
+        // const "command". A typo'd type or a missing command string used to
+        // be skipped silently here, so the hook never ran and nothing said why.
+        if (h?.type !== 'command') {
+          err(hooksFile, `"${event}" hook has type ${JSON.stringify(h?.type)}; only "command" is supported`);
+          continue;
+        }
+        if (typeof h.command !== 'string' || !h.command) {
+          err(hooksFile, `"${event}" hook has no "command" string`);
+          continue;
+        }
 
         // Cross-platform rule: hook entry points are node scripts in this repo.
         if (/\.(sh|ps1|bat|cmd)\b/.test(h.command)) {
@@ -407,6 +429,13 @@ function checkHookCommands(hooks, hooksFile, pluginDir) {
 // this is the copy CI actually runs, because this repo installs no dependencies
 // and therefore has no schema engine.
 function checkPluginManifestShape(plugin, manifestFile) {
+  if (!plugin.license) err(manifestFile, 'missing "license"');
+  if (plugin.description && String(plugin.description).length < 40) {
+    err(
+      manifestFile,
+      `"description" is ${String(plugin.description).length} chars; the schema requires at least 40, because this is what a user reads when choosing a pack`
+    );
+  }
   if (plugin.version != null && !/^\d+\.\d+\.\d+$/.test(String(plugin.version))) {
     err(manifestFile, `version "${plugin.version}" is not a bare x.y.z semver`);
   }
