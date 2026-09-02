@@ -20,6 +20,7 @@ const STATE_DIR = path.join(os.tmpdir(), 'claude-context-offload');
 
 const HOUR = 60 * 60 * 1000;
 const PRUNE_RULES = [
+  { suffix: '.tmp', ttlMs: 24 * HOUR },
   { prefix: 'has-plan-', ttlMs: 24 * HOUR },
   { prefix: 'nudged-', ttlMs: 24 * HOUR },
   { prefix: 'bg-warned-', ttlMs: 24 * HOUR },
@@ -28,7 +29,6 @@ const PRUNE_RULES = [
   { prefix: 'bg-ack-', ttlMs: 24 * HOUR },
   { prefix: 'thin-warned-', ttlMs: 24 * HOUR },
   { prefix: 'plan-', ttlMs: 24 * HOUR },
-  { suffix: '.tmp', ttlMs: 24 * HOUR },
 ];
 
 // --- shared:readStdin --- keep byte-identical; see tests/hook-helpers-consistent.test.mjs
@@ -90,7 +90,9 @@ function quiet(fn) {
 // session flag is not. A rule matches on prefix, on suffix, or on both: the
 // files in this directory are named both ways, `has-plan-<session>.flag` from
 // the front and `<session>.streak` from the back, so prefix-only matching
-// cannot express every owner. Nothing here may throw: a hook that died during
+// cannot express every owner. A rule with neither field is ignored rather than
+// treated as a wildcard, because this directory is shared and a wildcard would
+// delete other packs' state. Nothing here may throw: a hook that died during
 // housekeeping would drop the work it was actually called to do.
 function pruneStale(stateDir, rules) {
   quiet(() => {
@@ -98,6 +100,7 @@ function pruneStale(stateDir, rules) {
     for (const name of fs.readdirSync(stateDir)) {
       const rule = rules.find(
         (r) =>
+          (r.prefix !== undefined || r.suffix !== undefined) &&
           (r.prefix === undefined || name.startsWith(r.prefix)) &&
           (r.suffix === undefined || name.endsWith(r.suffix))
       );
