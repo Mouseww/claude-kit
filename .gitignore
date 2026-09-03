@@ -8,6 +8,15 @@ settings.json.*.bak
 # Local-only Claude Code state
 .claude/settings.local.json
 
+# Agent scratch directories that live inside the repository. Both are created
+# by tooling, hold no source, and are large: a worktree is a full second
+# checkout. Neither was ignored before, so a single `git add -A` would have
+# committed the lot.
+#   .claude/worktrees/ - created by the worktree tool for isolated branches
+#   .superpowers/      - per-plan ledgers, briefs and review packages
+.claude/worktrees/
+.superpowers/
+
 # OS noise
 .DS_Store
 Thumbs.db
