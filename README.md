@@ -1,11 +1,11 @@
 # claude-kit
 
-Five Claude Code plugins that keep a long session cheap: subagents with the model
+Six Claude Code plugins that keep a long session cheap: subagents with the model
 tier already bound per role, automatic truncation of verbose command output, answers
 that name the real file instead of a stand-in label and lead with the conclusion
 instead of a noun stack or filler, a code graph that answers "who calls this"
-without a grep sweep, and a pack that manages this repository from inside
-Claude.
+without a grep sweep, a rewriter that swaps a verbose shell command for a cheaper
+one before it runs, and a pack that manages this repository from inside Claude.
 
 Every hook and script is a single `.mjs`, so macOS, Linux and native Windows run
 identical code. `node` on `PATH` is the only requirement.
@@ -33,16 +33,19 @@ Then, in any Claude Code session:
 /plugin install concrete-answers@claude-kit
 /plugin install context-trim@claude-kit
 /plugin install code-graph@claude-kit
+/plugin install rtk@claude-kit
 /plugin install claude-kit-meta@claude-kit
 ```
 
 Install only the packs you want; they work on their own and better together.
 Restart the session if the agents do not show up under `/agents`.
 
-`code-graph` is the one pack here that installing does not turn on by itself:
-it ships `defaultEnabled: false` because it depends on an external CLI only you
-can install. Run `/code-graph:setup` once that CLI is in place — see `code-graph`
-under How it works for what it wires in and what it deliberately leaves out.
+`code-graph` and `rtk` are the two packs here that installing does not turn on by
+itself: both ship `defaultEnabled: false` because each depends on an external
+binary only you can install. Run `/code-graph:setup` or `/rtk:setup` once that
+binary is in place. See `code-graph` under How it works for what it wires in and
+what it deliberately leaves out, and the `rtk` skill for when its rewrite is the
+wrong thing and how to bypass it.
 
 `/plugin` is an interactive panel, so it exists only in a `claude` terminal. In the
 desktop app use the CLI form of the same commands: `claude plugin marketplace add

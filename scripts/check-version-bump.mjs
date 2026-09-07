@@ -12,10 +12,10 @@
 // user. Commit 7eb45ae changed a plugin README without a bump and was correct
 // to do so.
 //
-// Every infrastructure problem is a SKIP, never a failure. This repo has two
-// remotes with divergent history (bitbucket `main` and a cherry-picked public
-// `github-public`), so an unresolvable base ref is normal and must not turn
-// into a red build that teaches people to ignore it.
+// Every infrastructure problem is a SKIP, never a failure. This repo is mirrored
+// across remotes whose histories diverge because commits are cherry-picked
+// between them, so an unresolvable base ref is normal and must not turn into a
+// red build that teaches people to ignore it.
 
 import fs from 'node:fs';
 import path from 'node:path';
