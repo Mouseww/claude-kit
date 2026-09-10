@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  hasAgentTool,
+  grantsAgentTool,
   readSkillsList,
   bodyLinesAfterFrontmatter,
   findDispatchViolations,
@@ -18,11 +18,26 @@ import {
   findStaleExternalSkills,
 } from '../scripts/agent-nesting-rules.mjs';
 
-test('hasAgentTool: true when "Agent" is one of the comma-separated tools', () => {
-  assert.equal(hasAgentTool('Read, Grep, Glob, Agent'), true);
-  assert.equal(hasAgentTool('Read, Grep, Glob'), false);
-  assert.equal(hasAgentTool(''), false);
-  assert.equal(hasAgentTool(undefined), false);
+test('grantsAgentTool: tools: present and includes Agent -> granted', () => {
+  assert.equal(grantsAgentTool('Read, Grep, Glob, Agent', undefined), true);
+});
+
+test('grantsAgentTool: tools: present and does not include Agent -> not granted', () => {
+  assert.equal(grantsAgentTool('Read, Grep, Glob', undefined), false);
+  assert.equal(grantsAgentTool('', undefined), false);
+});
+
+test('grantsAgentTool: tools: omitted entirely -> granted (inherits all tools, including Agent)', () => {
+  assert.equal(grantsAgentTool(undefined, undefined), true);
+});
+
+test('grantsAgentTool: tools: omitted but disallowedTools: includes Agent -> not granted', () => {
+  assert.equal(grantsAgentTool(undefined, 'Agent'), false);
+  assert.equal(grantsAgentTool(undefined, 'Read, Agent'), false);
+});
+
+test('grantsAgentTool: disallowedTools: revokes Agent even when tools: would have granted it', () => {
+  assert.equal(grantsAgentTool('Read, Grep, Glob, Agent', 'Agent'), false);
 });
 
 test('readSkillsList: reads a block-form skills: list from frontmatter', () => {

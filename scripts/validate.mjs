@@ -42,7 +42,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  hasAgentTool,
+  grantsAgentTool,
   readSkillsList,
   bodyLinesAfterFrontmatter,
   findDispatchViolations,
@@ -323,7 +323,7 @@ for (const entry of marketplace.plugins) {
     // quick-read/quick-io; an Agent-tool agent without it has no guardrail
     // against nesting a full role agent, which blocks the parent for the
     // nested child's entire duration.
-    if (hasAgentTool(fm.tools)) {
+    if (grantsAgentTool(fm.tools, fm.disallowedTools)) {
       const text = agentText;
       const skills = agentSkills;
       if (!skills.includes('nesting-discipline')) {

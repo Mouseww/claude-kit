@@ -16,9 +16,22 @@
 
 // ---- check A: Agent-tool agents must carry nesting-discipline ---------------
 
-/** `tools:` frontmatter is a comma-separated line; true if "Agent" is one of the items. */
-export function hasAgentTool(toolsValue) {
-  if (!toolsValue) return false;
+/**
+ * `tools:` and `disallowedTools:` frontmatter are each a comma-separated
+ * line. When `tools:` is present it is an allow-list: Agent is granted only
+ * if it is one of the listed items. When `tools:` is absent, the agent
+ * inherits every tool (this is Claude Code's own default), so Agent is
+ * granted by default in that case. Either way, `disallowedTools:` naming
+ * Agent overrides and revokes it.
+ */
+export function grantsAgentTool(toolsValue, disallowedToolsValue) {
+  const disallowed = (disallowedToolsValue || '')
+    .split(',')
+    .map((s) => s.trim())
+    .includes('Agent');
+  if (disallowed) return false;
+
+  if (toolsValue === undefined) return true;
   return toolsValue
     .split(',')
     .map((s) => s.trim())
