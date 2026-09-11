@@ -117,7 +117,7 @@ Restart after that and the daily check takes over.
 |---|---|
 | Verbose output | A failing build or test log comes back truncated behind a `[context-trim: ...]` header, with the error lines and the final verdict kept. Clean output is left whole unless it is very large |
 | Delegation | Claude picks a subagent by its description, already bound to the right model tier |
-| Reminders | Five hooks nudge you after a long solo stretch, when dispatching with no task plan, when a dispatch comes back interrupted, empty or suspiciously thin, and when the fable-tier last resort is about to be called. None of them ever blocks a call |
+| Reminders | Four hooks nudge you after a long solo stretch, when dispatching with no task plan, when a dispatch comes back interrupted, empty or suspiciously thin, and when a shell command's only job is to pull content into context. None of them ever blocks a call |
 | Reporting | Answers name real paths, symbols and commands instead of stand-in labels like `$1.1` or shape-words like "improved robustness", lead with the conclusion, and recommend instead of listing options |
 | Metrics | Every subagent call is logged to `~/.claude/context-offload-metrics.jsonl` |
 
@@ -125,7 +125,7 @@ Restart after that and the daily check takes over.
 
 ```
 use dev-agents:quick-read to find every caller of parseConfig
-hand the migration to dev-agents:devops-engineer
+hand the migration to dev-agents:backend-dev
 ```
 
 **Slash commands:**
@@ -157,16 +157,11 @@ hand the migration to dev-agents:devops-engineer
 
 ### `dev-agents`
 
-Eleven subagents with the model tier fixed per role, so you never pass `model` by
+Seven subagents with the model tier fixed per role, so you never pass `model` by
 hand. `quick-read` (haiku) reads, searches and summarizes with no write access;
 `quick-io` (sonnet) makes edits that follow a rule you can state; `deepthink`
-(opus) decides and writes design docs but never touches source. Seven role agents
-cover spec, backend, frontend, UI/UX, tests, review and ops.
-
-The eleventh, `last-resort` (fable), is gated rather than routed: it is for a
-problem the opus tier has already failed to solve, and a hook prints its four
-preconditions on every dispatch, because an accidental call is the most expensive
-mistake this pack can make.
+(opus) decides and writes design docs but never touches source. Four role agents
+cover backend, frontend (including UI/UX and prototypes), tests, and review.
 
 Two separate things make it pay. A subagent's raw output stays in its own context,
 so only the conclusion comes back. And its typing runs on a cheaper tier, which
@@ -177,24 +172,23 @@ the heaviest reading usually is.
 The honest limit: none of this controls which model the *main thread* uses when it
 writes files itself. For that you still want `/model opusplan`.
 
-Seven of the eleven agents also name a skill in their frontmatter that this
+Five of the seven agents also name a skill in their frontmatter that this
 repository does not ship: `security-review` (quality-reviewer), `api-design`
-(backend-dev), `deployment-patterns` (devops-engineer), `systematic-debugging`
-(deepthink and last-resort), `frontend-design` (frontend-dev and ui-ux-designer),
-`writing-plans` (requirements-analyst), and `e2e-testing` (test-engineer).
+(backend-dev), `systematic-debugging` (deepthink), `frontend-design` and
+`frontend-patterns` (frontend-dev), and `e2e-testing` (test-engineer).
 `nesting-discipline` is the only companion skill that actually lives in this
 repo; the rest are meant to come from a user's global `~/.claude/skills` or
 another marketplace pack, so for anyone who installed only `dev-agents` the
-reference silently does nothing. Each of the seven is listed under
+reference silently does nothing. Each of these six is listed under
 `externalSkills` in `plugins/dev-agents/.claude-plugin/plugin.json` — a key
 Claude Code itself ignores, kept so this repo's validator, and anyone reading
 the manifest, can tell "not shipped here" apart from "missing by mistake."
 `scripts/validate.mjs` checks every skill an agent's frontmatter names against
 both the repo's own `plugins/*/skills/<name>/SKILL.md` paths and that
 allowlist: a misspelled name fails the build, an absent-but-allowlisted one
-does not, because these seven are not supposed to exist in this repo. It also
+does not, because these six are not supposed to exist in this repo. It also
 warns when an allowlisted name turns out to already exist in the repo, since
-that means the allowlist entry has gone stale. None of the seven agents
+that means the allowlist entry has gone stale. None of the five agents
 assumes its skill is loaded; each has fallback wording in its prompt body for
 the case where it is not. Anyone who wants the fuller behavior installs the
 same-named skill wherever their own `~/.claude/skills` or marketplace already

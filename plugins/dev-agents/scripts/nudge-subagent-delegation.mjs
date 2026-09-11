@@ -291,7 +291,7 @@ async function main() {
     }
   } else {
     if (count === WRITE_THRESHOLD) {
-      msg = `This thread has made ${count} file edits in a row on the main model. If the REMAINING work is code you have already decided how to write, hand it over rather than typing it here: quick-io (sonnet) for changes that follow a rule you can state, or the matching role agent (backend-dev, frontend-dev, test-engineer, devops-engineer) for a scoped chunk. Brief them with the DECISION, not the finished code, otherwise the brief costs as much as writing it. If the remaining edits still need judgement call by call, keep going here; that is a legitimate answer.`;
+      msg = `This thread has made ${count} file edits in a row on the main model. If the REMAINING work is code you have already decided how to write, hand it over rather than typing it here: quick-io (sonnet) for changes that follow a rule you can state, or the matching role agent (backend-dev, frontend-dev, test-engineer) for a scoped chunk. Brief them with the DECISION, not the finished code, otherwise the brief costs as much as writing it. If the remaining edits still need judgement call by call, keep going here; that is a legitimate answer.`;
     } else if (count > WRITE_THRESHOLD && count % WRITE_REPEAT === 0) {
       msg = `Still editing inline (${count} consecutive edits on the main model). Worth one more check: is any of what is left mechanical enough to specify and hand to quick-io or a role agent?`;
     }

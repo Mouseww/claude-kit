@@ -1,6 +1,6 @@
 ---
 name: quick-io
-description: Use for mechanical read/write sub-tasks that need no deep design judgment - reading files, extracting fields, format conversion, or batch edits that follow a clear, explicit rule. Also use as the write-side handoff target when the caller has already decided what a change should be. Do not use for architecture design or judgment calls about which approach is better; hand that to deepthink.
+description: Mechanical edits that follow an explicit rule, plus the write-side handoff once the caller has decided the change. Not for judgement calls about which approach is better (use deepthink).
 disallowedTools: Artifact, Agent, mcp__Desktop_Commander
 model: sonnet
 effort: medium

@@ -1,6 +1,6 @@
 ---
 name: quality-reviewer
-description: Use for code quality review - reviewing a diff for correctness, security, maintainability, error handling, naming, and adherence to the repository's own conventions, producing a severity-ranked list of findings. It is read-only and never edits code; it only reports problems, with a location and a suggested fix direction, for the caller or a dev agent to act on. Do not use it for implementation or refactor landing (hand that to quick-io / backend-dev / frontend-dev).
+description: Read-only review of a diff for correctness, security, maintainability and repo conventions, returning severity-ranked findings with locations. Never edits; reports only.
 disallowedTools: Edit, Write, NotebookEdit, Artifact, mcp__Desktop_Commander
 model: sonnet
 effort: high

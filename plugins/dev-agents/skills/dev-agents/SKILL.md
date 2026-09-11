@@ -1,11 +1,11 @@
 ---
 name: dev-agents
-description: Use when a task is long or multi-step and you are deciding what to do yourself versus hand to a subagent - searching code, reading several files, running commands with verbose output, needing an independent review, or weighing several designs. Routes the next action to one of eleven packaged agents with the model tier already bound, gives the pre-dispatch checklist and the brief template, and states how to tell a failed dispatch from a real result. Apply it even when nobody mentioned saving tokens.
+description: Use when a task is long or multi-step and you are deciding what to do yourself versus hand to a subagent - searching code, reading several files, running commands with verbose output, needing an independent review, or weighing several designs. Routes the next action to one of seven packaged agents with the model tier already bound, gives the pre-dispatch checklist and the brief template, and states how to tell a failed dispatch from a real result. Apply it even when nobody mentioned saving tokens.
 ---
 
 # dev-agents
 
-Eleven subagents with the model tier fixed per role. This file is the decision
+Seven subagents with the model tier fixed per role. This file is the decision
 procedure: what to route where, what to check before dispatching, and how to
 tell a failed dispatch from a real one.
 
@@ -28,7 +28,6 @@ answer.
 | Make an edit that follows a rule you can state | `quick-io` |
 | Write out a change you have already fully decided | `quick-io`, or the role agent |
 | Weigh two approaches, review a plan or spec, root-cause a hard bug | `deepthink` |
-| Turn a vague ask into a spec | `requirements-analyst` |
 | Land a bounded chunk of one domain | the matching role agent |
 | Audit a diff | `quality-reviewer` |
 
@@ -43,14 +42,13 @@ because that is when you survey an unfamiliar codebase and locate call sites.
 | Design review | Whether the approach holds up | `deepthink` |
 | Diagnosis | Logs, stack traces, version diffs | `quick-read`, then `deepthink` for the root cause |
 | Implementation | A change already decided | `quick-io` or the matching role agent |
-| Verification | Test runs, build output | `test-engineer`, `devops-engineer` |
+| Verification | Test runs, build output | `test-engineer` |
 
 When two agents both fit, take the lower tier: `quick-io` over a role agent, a
 role agent over `deepthink`. The cheaper one escalates if the task turns out to
 need judgement, and that escalation costs less than a wasted opus call.
 
-Between the two opus agents: vague request in, structured spec out goes to
-`requirements-analyst`; proposal or plan in, verdict out goes to `deepthink`.
+Proposal or plan in, verdict out goes to `deepthink`.
 
 ## The agents
 
@@ -74,37 +72,16 @@ For delegating a whole coherent chunk of a role, with the tier already bound.
 
 | Agent | Model | Owns |
 |---|---|---|
-| `requirements-analyst` | opus | Turning a vague ask into a spec: user stories, acceptance criteria, task breakdown |
 | `backend-dev` | sonnet | APIs, business logic, data access, validation, error handling |
-| `frontend-dev` | sonnet | Components, state, styling, accessibility, wiring to APIs |
-| `ui-ux-designer` | sonnet | Interaction flows, information architecture, state design, prototypes |
+| `frontend-dev` | sonnet | Components, state, styling, accessibility, interaction/visual design, wiring to APIs |
 | `test-engineer` | sonnet | Unit/integration/e2e, TDD, coverage gaps; includes Playwright |
 | `quality-reviewer` | sonnet | Reviewing a diff, severity-ranked findings, read-only |
-| `devops-engineer` | sonnet | CI/CD, containers, release scripts, migrations, rollback |
 
 Orchestrate from the main thread: `deepthink` for the approach, the role agent
 to land it, `quality-reviewer` to audit, `quick-io` for cleanup. Role agents
 carry the `Agent` tool and may push cheap sub-work down to the primitives, but
 treat that nesting as an optimization: if a nested call fails, the role agent
 finishes the work itself rather than stalling.
-
-### `last-resort` (fable)
-
-Gated on what has already been tried, not on what the work is. **All four must
-hold. State each one out loud in the dispatching turn.**
-
-1. A cheaper agent genuinely attempted the problem, and you can say what it
-   concluded. "It looks hard" is not an attempt.
-2. The failure is an observed behaviour, not an inference from reading code.
-3. The brief lists what was already tried and ruled out, so the dispatch does
-   not re-run it.
-4. The blocker is reasoning, not missing context. If a `quick-read` could go and
-   fetch the fact, that is the cheaper next step.
-
-Any one of them failing points at a cheaper action. The fourth is the most
-common false positive: an impasse that is really a missing file.
-
-Its output is an analysis document. It never implements and never edits source.
 
 ## Do not delegate when
 
@@ -142,7 +119,7 @@ Run this list. Each item has a failure it prevents.
    file watcher, an interactive prompt, `git rebase -i`. The command never
    returns and the agent hangs until something kills it, which from the outside
    is indistinguishable from thinking hard. If the work needs a server, say to
-   start it detached and poll it, or hand that part to `devops-engineer`.
+   start it detached and poll it instead.
 4. **The brief carries the decision, not the code.** See below.
 5. **Independent parts go out in one turn,** several Agent calls in one message,
    not one at a time round-tripping.

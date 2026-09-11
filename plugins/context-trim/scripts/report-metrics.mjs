@@ -280,7 +280,7 @@ console.log('== Does nested delegation actually happen? ==');
 // agent_type for a plugin-shipped subagent is namespaced, e.g.
 // "dev-agents:deepthink", so every pattern must tolerate a "<plugin>:" prefix.
 const ROLE_RE =
-  /(^|:)(deepthink|requirements-analyst|backend-dev|frontend-dev|ui-ux-designer|test-engineer|quality-reviewer|devops-engineer)$/;
+  /(^|:)(deepthink|backend-dev|frontend-dev|test-engineer|quality-reviewer)$/;
 const role = stops.filter((r) => ROLE_RE.test(r.agent || '')).length;
 const qr = stops.filter((r) => /(^|:)quick-read$/.test(r.agent || '')).length;
 console.log(`role agents / deepthink invoked: ${role}`);

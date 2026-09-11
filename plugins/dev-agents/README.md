@@ -1,6 +1,6 @@
 # dev-agents
 
-This plugin packages eleven subagents with the model tier fixed per role, five
+This plugin packages seven subagents with the model tier fixed per role, four
 reminder hooks, and a `CLAUDE.md` block. It exists so that reading, writing, and
 reviewing code each land on the cheapest model tier that can do the job well,
 without the main thread having to re-decide that on every turn. This file is the
@@ -17,7 +17,7 @@ Four layers, each doing a different job:
   behaviour.
 - `skills/dev-agents/SKILL.md`, loaded on demand, holds the decision rules and
   checklists an agent consults at the moment it is deciding what to do.
-- The five hooks (below) are reminders only. None of them ever blocks a tool
+- The four hooks (below) are reminders only. None of them ever blocks a tool
   call.
 - Agent frontmatter is the only hard guarantee in the pack: it binds the model
   tier, and nothing short of that is enforced mechanically.
@@ -95,29 +95,9 @@ guardrail is that it produces **only** those documents. It does not touch source
 or implement features. That forces it to explain the approach and hand it back,
 instead of quietly doing the implementation too.
 
-### The last resort
-
-`last-resort` is different in kind from the other ten. They are routed by *what
-the work is*; this one is gated on *what has already been tried*. The four
-preconditions that all have to hold before it is worth its cost live in the
-`dev-agents` skill.
-
-Its prompt tells it to attack the problem *statement* before the problem, on the
-premise that an impasse surviving an opus attempt is usually a wrong framing, an
-unchecked constraint or an inherited assumption rather than a missing technique.
-It has `Bash` specifically to reproduce the reported failure, because "the
-failure is not what it was described as" is a real and common answer. It has
-`Write` but not `Edit`, the same guardrail as `deepthink`: conclusions, never
-source.
-
-Two instructions in it exist to counter its own tier. It is told to say so
-plainly when the answer turns out to be small, rather than inflating to justify
-the call. And it is told to push bulk reading down to `quick-read` rather than
-spending the most expensive context in the session on file dumps.
-
 ## The hooks
 
-Five hooks ship with this pack. All are reminders. None of them ever blocks a
+Four hooks ship with this pack. All are reminders. None of them ever blocks a
 tool call.
 
 ### `nudge-subagent-delegation`
@@ -180,19 +160,6 @@ response object so its flags can still be inspected when no text comes out.
 
 It never fires inside a subagent. Tunables (`THIN_CHARS`, `REPEAT_EVERY`) are at
 the top of `scripts/check-subagent-return.mjs`.
-
-### `gate-last-resort`
-
-PreToolUse on `Agent`, firing only when the dispatched `subagent_type` contains
-`last-resort` (a substring test, so both the bare and the namespaced id match).
-It prints the four preconditions from the `last-resort` section of the
-`dev-agents` skill and asks for them to be confirmed out loud in that turn.
-
-Deliberately **unthrottled and stateless**, unlike `require-task-plan`. That hook
-throttles because a planless dispatch is common and nagging it is worse than
-missing one. This dispatch is rare by definition and the most expensive mistake
-the pack can make, so it gets the full checklist every single time and keeps no
-flag file to go stale.
 
 ### `nudge-content-fetch`
 

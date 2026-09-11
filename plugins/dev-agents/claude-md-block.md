@@ -17,9 +17,9 @@ Route by complexity:
 - Edits that follow a rule you can state, or a change you have already decided -> `dev-agents:quick-io` (sonnet).
 - Design, trade-offs, hard debugging, plan or spec review -> `dev-agents:deepthink` (opus; writes design docs and ADRs, never implements).
 
-Role-scoped chunks, all under the same `dev-agents:` prefix: spec -> `requirements-analyst`; backend -> `backend-dev`; frontend -> `frontend-dev`; UI/UX and prototypes -> `ui-ux-designer`; tests -> `test-engineer`; code review, read-only -> `quality-reviewer`; CI/CD, deploy and migrations -> `devops-engineer`.
+Role-scoped chunks, all under the same `dev-agents:` prefix: backend -> `backend-dev`; frontend, including UI/UX and prototypes -> `frontend-dev`; tests -> `test-engineer`; code review, read-only -> `quality-reviewer`.
 
-Vague request in, structured spec out -> `requirements-analyst`. Proposal or plan in, verdict out -> `deepthink`. When unsure, prefer the cheaper agent; it will escalate if needed.
+Proposal or plan in, verdict out -> `deepthink`. When unsure, prefer the cheaper agent; it will escalate if needed.
 
 **The write handoff, the one most often missed.** Writing out code you already understand costs more than deciding it. Hand it over instead, and brief the agent with the **decision** — the interface, the rule, the file list, the constraint — not the finished code; a brief containing the code costs as much as writing it yourself. This applies mid-task too: you do not have to hand over a whole feature to hand over one implementation step.
 
