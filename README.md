@@ -170,7 +170,10 @@ at every stage of a task rather than once implementation starts, which is where
 the heaviest reading usually is.
 
 The honest limit: none of this controls which model the *main thread* uses when it
-writes files itself. For that you still want `/model opusplan`.
+writes files itself. For that you still want `/model opusplan`, with the caveat
+that it upgrades to opus only while plan mode is active. Outside plan mode, and
+that includes all of `auto` mode, it resolves to sonnet and does nothing. The
+`dev-agents` README documents the gate and two further caveats.
 
 Five of the seven agents also name a skill in their frontmatter that this
 repository does not ship: `security-review` (quality-reviewer), `api-design`

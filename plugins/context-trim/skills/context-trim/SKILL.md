@@ -112,4 +112,4 @@ Do not add `transcript_path` parsing. The docs say the transcript is written asy
 
 ## What this plugin does not do
 
-It does not change which model writes your code. Truncation is orthogonal to model choice: a 100k-character build log floods the context on any tier. For getting implementation onto a cheaper model, use `/model opusplan`. See the `dev-agents` plugin for the delegation side, and read its honest assessment of what delegation can and cannot deliver.
+It does not change which model writes your code. Truncation is orthogonal to model choice: a 100k-character build log floods the context on any tier. For getting implementation onto a cheaper model, use `/model opusplan`, remembering that it only reaches opus while plan mode is active and is inert under `auto`. See the `dev-agents` plugin for the delegation side, and read its honest assessment of what delegation can and cannot deliver.

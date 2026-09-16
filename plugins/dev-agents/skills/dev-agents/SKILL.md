@@ -59,7 +59,7 @@ Installed through this plugin the ids are namespaced: `dev-agents:quick-read`,
 
 | Agent | Model | For |
 |---|---|---|
-| `quick-read` | haiku | Read-only: search, extract, summarize, plus inspection commands. No Edit/Write |
+| `quick-read` | haiku | Read-only: search, extract, summarize, plus inspection commands. No Edit; writes only to the scratchpad |
 | `quick-io` | sonnet | Mechanical file changes that follow a rule you can state. Has Bash, so it can format, move files, and run a targeted check on what it touched |
 | `deepthink` | opus | Design judgement, trade-offs, hard diagnosis. Writes conclusions, never implements |
 

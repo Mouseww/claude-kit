@@ -90,6 +90,16 @@ split is enforced by their prompts, not by the tool grant: `Bash` is all or
 nothing in agent frontmatter. If you need it enforced mechanically, deny the
 commands in `permissions` rather than relying on the agent text.
 
+`quick-read` has `Write` for one purpose: parking raw material in the session
+scratchpad and returning the path plus the conclusion. Denying it was a mistake
+worth recording, because it caused the exact failure it looked like it prevented.
+An agent that cannot park a large result has only one way to hand it over, which
+is to put it in the return value, and the measured symptom was `quick-read`
+returns routinely blowing past the 4000-character line this pack itself set. The
+cost is real: `disallowedTools` cannot be scoped by path, so "scratchpad only" is
+prompt text, not a guarantee. That trade is deliberate. The lost guarantee was
+manufacturing the leak.
+
 `deepthink` has `Write` so it can produce a design doc, ADR or analysis, but its
 guardrail is that it produces **only** those documents. It does not touch source
 or implement features. That forces it to explain the approach and hand it back,
@@ -132,6 +142,18 @@ pressure on genuine multi-step work without nagging a one-shot handoff. It never
 fires inside a subagent, so nested delegation is untouched. Creating a plan
 resets the counter, so if a plan is abandoned mid-session the reminder comes
 back rather than staying silenced.
+
+Two exemptions, both there to stop the hook penalising a correct dispatch:
+
+- **Read-only exploratory agents** (`Explore`, `Plan`, `quick-read`) are never
+  asked for a plan. Demanding the steps before the exploration that works out
+  what the steps are gets the order backwards.
+- **`Explore`'s own `very thorough` breadth value** is not counted as an
+  unbounded-scope marker. Explore's tool description tells the caller to pass
+  exactly that string, so firing on it there penalises the documented API rather
+  than flagging a scope smell. Every other marker still applies to Explore: an
+  Explore brief saying "entire codebase" is a real risk, because the danger is a
+  brief with no bounds, not the breadth argument.
 
 Set `REPEAT_EVERY = 1` at the top of `scripts/require-task-plan.mjs` to nudge on
 every planless dispatch instead.
@@ -198,20 +220,50 @@ compressed dump of the whole file.
 
 ## The honest limit: this does not control the main thread's model
 
-`/model opusplan` has opus plan and then **the platform switches to sonnet to
-execute**. That switch is done by the platform, not by the model choosing to
-cooperate, which makes it the most reliable way to get execution and file writes
-onto a cheap tier.
+`/model opusplan` is the platform's own answer to this, and the switch is done by
+the platform rather than by the model choosing to cooperate, which makes it the
+most reliable way to get execution and file writes onto a cheap tier. But its
+mechanics are narrower than the name suggests, and worth stating exactly, because
+all three of the caveats below are easy to hit without noticing.
 
-The boundary matters. The seven sonnet role agents genuinely run on sonnet once
-invoked, because the tier in their frontmatter is a hard guarantee. But **nothing
-stops the main thread from using its own Edit/Write**, and the main thread runs
-on whatever model is active. The write-streak nudge and the write-handoff
-guidance in the `dev-agents` skill both point at this, but they are reminders,
-not enforcement.
+**It is keyed on plan mode being active, not on planning being finished.**
+`opusplan` is an alias, not a model. Its baseline resolves to sonnet, and the
+upgrade to opus happens only while the permission mode is literally `plan`. There
+is no "plan on opus, then hand off to sonnet" phase transition; there is one
+alias that resolves two ways depending on the mode you are in right now. The
+same mechanism exists for the `haiku` alias, which upgrades to sonnet in plan
+mode, so this is a general two-tier table rather than something built for opus.
+
+Three consequences:
+
+- **Set `opusplan` and never enter plan mode, and you run on sonnet the whole
+  time.** Not one request goes to opus. Claude Code ships a startup reminder for
+  exactly this case, shown when your model setting is `opusplan` and you have not
+  used plan mode in over three days.
+- **`auto` mode never satisfies the gate.** `auto` is its own permission mode,
+  parallel to `plan`, not a superset of it. Under `auto` the upgrade condition is
+  never true, so `opusplan` behaves as a roundabout `/model sonnet`. Since the
+  point of `auto` is long uninterrupted autonomous stretches, and those are
+  stretches where you never stop to plan, the two work against each other. You
+  can still get opus by entering plan mode by hand and exiting back to `auto`,
+  but that is a manual gear, not platform enforcement.
+- **Past 200k tokens of context the opus upgrade is silently skipped**, even
+  inside plan mode. The longer a session runs the less likely it is to get opus,
+  which is the opposite of when opus judgement is worth most. The haiku alias is
+  not affected, since its upgrade target is sonnet.
+
+The boundary with this plugin still matters. The seven agents genuinely run on
+the tier in their frontmatter once invoked, because that tier is a hard
+guarantee. But **nothing stops the main thread from using its own Edit/Write**,
+and the main thread runs on whatever model is active. The write-streak nudge and
+the write-handoff guidance in the `dev-agents` skill both point at this, but they
+are reminders, not enforcement.
 
 So the two are complementary: subagents cover work that delegation moves,
-`opusplan` covers everything else. This plugin does not replace it.
+`opusplan` covers everything else that happens inside plan mode. This plugin does
+not replace it. Note the asymmetry though: under `auto` mode `opusplan` is inert
+while frontmatter tiers still hold, so which of the two is doing any work depends
+on which permission mode you actually spend your time in.
 
 ## Is any of this paying off?
 

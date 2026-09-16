@@ -89,14 +89,40 @@ const UNBOUNDED_MARKERS = [
 ];
 const UNBOUNDED_AGENT = 'fleet-engineering:fleet-evaluator';
 
+// "very thorough" is the documented breadth value for the built-in Explore
+// agent, whose own tool description tells the caller to pass exactly that
+// string. Firing on it there penalises the official API rather than a scope
+// smell, so skip that one marker for those agents. Every other marker still
+// applies to them: an Explore brief saying "entire codebase" is a real risk,
+// because the danger is a brief with no bounds, not the breadth argument.
+const DOCUMENTED_BREADTH_AGENTS = new Set(['Explore']);
+const DOCUMENTED_BREADTH_MARKER = 'very thorough';
+
+// Agents whose whole job is read-only exploration or planning. The plan
+// reminder exists so that a long run plus a context compaction cannot lose the
+// remaining steps, but demanding a plan *before* an exploratory dispatch
+// inverts the order: exploring is how you find out what the steps are, and
+// asking the Plan agent for a plan is circular. The reminder still fires for
+// anything that writes or implements, and the remaining-steps echo below is
+// unaffected, since an existing plan is worth repeating whatever the target is.
+const EXPLORATORY_AGENTS = new Set([
+  'Explore',
+  'Plan',
+  'quick-read',
+  'dev-agents:quick-read',
+]);
+
 function unboundedMatch(toolInput) {
   if (toolInput?.subagent_type === UNBOUNDED_AGENT) {
     return `${UNBOUNDED_AGENT} (measured 13 minutes)`;
   }
+  const agent = toolInput?.subagent_type;
+  const skipBreadthMarker = typeof agent === 'string' && DOCUMENTED_BREADTH_AGENTS.has(agent);
   const haystacks = [toolInput?.prompt, toolInput?.description].filter((s) => typeof s === 'string');
   for (const text of haystacks) {
     const lower = text.toLowerCase();
     for (const marker of UNBOUNDED_MARKERS) {
+      if (skipBreadthMarker && marker === DOCUMENTED_BREADTH_MARKER) continue;
       if (lower.includes(marker.toLowerCase())) return marker;
     }
   }
@@ -274,7 +300,7 @@ async function main() {
   const hasPlan = fs.existsSync(path.join(STATE_DIR, `has-plan-${session}.flag`));
 
   // A plan exists: skip the plan reminder, but still emit anything collected above.
-  if (!hasPlan) {
+  if (!hasPlan && !EXPLORATORY_AGENTS.has(toolInput.subagent_type)) {
     const countFile = path.join(STATE_DIR, `nudged-${session}.count`);
     const n = bumpCounter(countFile);
 

@@ -13,7 +13,7 @@ Delegation serves two goals (usually only one applies):
 
 Route by complexity:
 
-- Read-only search / extract / summarize, including command output -> `dev-agents:quick-read` (haiku; no Edit/Write).
+- Read-only search / extract / summarize, including command output -> `dev-agents:quick-read` (haiku; no Edit, and it writes only to the scratchpad).
 - Edits that follow a rule you can state, or a change you have already decided -> `dev-agents:quick-io` (sonnet).
 - Design, trade-offs, hard debugging, plan or spec review -> `dev-agents:deepthink` (opus; writes design docs and ADRs, never implements).
 

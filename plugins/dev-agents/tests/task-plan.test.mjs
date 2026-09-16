@@ -165,6 +165,48 @@ test('a bounded foreground dispatch with an explicit file list stays silent', ()
   assert.equal(out, null);
 });
 
+test("Explore's own documented breadth value is not read as unbounded scope", () => {
+  const s = newSession('explore-breadth');
+  createPlan(s);
+  const out = dispatch(s, {
+    tool_input: { subagent_type: 'Explore', prompt: 'Search breadth: very thorough. Find the retry helpers.' },
+  });
+  assert.equal(out, null);
+});
+
+test('the breadth exemption is scoped to Explore and to that one marker', () => {
+  const withPlan = newSession('explore-still-bounded');
+  createPlan(withPlan);
+  const stillFlagged = dispatch(withPlan, {
+    tool_input: { subagent_type: 'Explore', prompt: 'Audit the entire codebase for retry helpers.' },
+  });
+  assert.ok(stillFlagged, 'an Explore brief with no bounds is still a real risk');
+  assert.match(stillFlagged.hookSpecificOutput.additionalContext, /"entire codebase"/);
+
+  const other = newSession('breadth-not-exempt-elsewhere');
+  createPlan(other);
+  const out = dispatch(other, {
+    tool_input: { subagent_type: 'dev-agents:quick-read', prompt: 'Be very thorough about this.' },
+  });
+  assert.ok(out, 'the marker still applies to agents that do not document it');
+  assert.match(out.hookSpecificOutput.additionalContext, /"very thorough"/);
+});
+
+test('read-only exploratory dispatches are not asked for a task plan first', () => {
+  for (const agent of ['Explore', 'Plan', 'quick-read', 'dev-agents:quick-read']) {
+    const s = newSession(`no-plan-${agent.replace(/[^a-z-]/gi, '-')}`);
+    const out = dispatch(s, { tool_input: { subagent_type: agent, prompt: 'Read src/foo.ts.' } });
+    assert.equal(out, null, `${agent} should not be asked to plan before exploring`);
+  }
+});
+
+test('a non-exploratory dispatch is still asked for a task plan', () => {
+  const s = newSession('no-plan-writer');
+  const out = dispatch(s, { tool_input: { subagent_type: 'dev-agents:quick-io', prompt: 'Edit src/foo.ts.' } });
+  assert.ok(out, 'expected a reminder');
+  assert.match(out.hookSpecificOutput.additionalContext, /no task plan has been created/);
+});
+
 test('unbounded-scope reminder fires once per session even across repeated matches', () => {
   const s = newSession('unbounded-once');
   createPlan(s);
