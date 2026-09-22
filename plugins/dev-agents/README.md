@@ -166,13 +166,32 @@ and at most one speaks per call.
 
 | Branch | Condition | Throttle |
 |---|---|---|
-| Background ack | the call went out with `run_in_background: true` | once per session |
+| Background ack | the call went out with `run_in_background: true`, or the returned text matches `BACKGROUND_ACK_PATTERN` | none, every time |
 | Failure | `tool_response` null, a truthy `interrupted` / `stoppedByUser` / `toolDenialKind` / `is_error` / `error` flag, an interruption marker in the text, or empty text | none, every time |
 | Thin result | returned text shorter than `THIN_CHARS` (80) | first, then every third |
 
 The failure branch is deliberately unthrottled: a dispatch that did not happen
 is worth interrupting for every single time, and unlike the write-streak nudge
 there is no judgement call for it to get wrong.
+
+The background branch is unthrottled for a different reason. It used to fire
+once per session, behind a `bg-ack-<session>.flag`, on the theory that the
+caller only needs telling once. That was wrong twice over. A parallel batch runs
+one copy of this hook per dispatch simultaneously, all racing for the same flag,
+so a batch of eight background dispatches got exactly one reminder and waved the
+other seven through in silence. And the message is not a general lesson but a
+claim about one specific dispatch that has not returned yet, so it only means
+anything attached to that dispatch. The reminder therefore names the dispatch it
+refers to, by `subagent_type` and a clipped `description`, since a parallel
+batch's acknowledgements are otherwise identical. It never echoes the `agentId`,
+which the harness marks as internal metadata.
+
+The text-pattern half of the condition is a fallback for a harness that
+backgrounds without spelling `run_in_background` out in the call, backgrounding
+being the Agent tool's documented default. The real acknowledgement runs about
+1134 characters and reads as a confident success ("Async agent launched
+successfully"), so it clears the thin-result branch on its own and would
+otherwise pass every check silently.
 
 The reason `tool_response` is probed rather than read is that its shape is
 version dependent, the same caveat `measure-subagent.mjs` carries: it may be a

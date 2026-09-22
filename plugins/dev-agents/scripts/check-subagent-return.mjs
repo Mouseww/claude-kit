@@ -29,11 +29,57 @@ const REPEAT_EVERY = 3; // after the first thin-result nudge, repeat every Nth
 
 const STATE_DIR = path.join(os.tmpdir(), 'claude-context-offload');
 
-const BACKGROUND_ACK =
-  '[dev-agents] This was a background dispatch, so what you just received is an acknowledgement, ' +
-  'not the result. Do not report the task as done and do not summarize findings from it yet. ' +
-  'Carry on with work that does not depend on it, and read the real output with TaskOutput before ' +
-  'making any claim about what it found.';
+// A background dispatch returns a long, confident-looking acknowledgement
+// ("Async agent launched successfully...", measured at 1134 characters), so it
+// trips neither the failure branch nor the thin-result branch. This reminder is
+// the only thing standing between that acknowledgement and a caller who reads
+// it as a finished result and redoes the work itself.
+//
+// It therefore fires on EVERY background dispatch, with no throttle. An earlier
+// version wrote a once-per-session flag, on the theory that the caller learns
+// the rule after being told once. It does not, for two reasons. A parallel
+// batch (eight background dispatches in one message is normal usage here) runs
+// eight copies of this hook at the same time racing for one flag, so exactly
+// one of the eight got the reminder and the other seven were silently waved
+// through. And the reminder is not a general lesson: it is a claim about one
+// specific dispatch that has not come back yet, so it has to be attached to
+// that dispatch to mean anything.
+//
+// `label` names which dispatch this is about, because in a parallel batch the
+// acknowledgements are otherwise indistinguishable from one another. The
+// acknowledgement's own agentId is deliberately NOT included: the harness marks
+// it internal metadata that must not be echoed.
+function backgroundAck(label) {
+  return (
+    '[dev-agents] ' +
+    label +
+    ' was a background dispatch, so what you just received is an acknowledgement, ' +
+    'not the result. Do not report the task as done and do not summarize findings from it yet. ' +
+    'Carry on with work that does not depend on it, and read the real output with TaskOutput before ' +
+    'making any claim about what it found. If several dispatches went out together, each one needs ' +
+    'its own output read; one returning tells you nothing about the others.'
+  );
+}
+
+// Fallback for a harness that backgrounds without an explicit
+// run_in_background flag in tool_input (the Agent tool documents backgrounding
+// as its default, and a default does not have to be spelled out in the call).
+// Where that happens the flag check below sees nothing, so match the
+// acknowledgement text itself. Phrasing is version dependent, hence several
+// independent anchors rather than one exact string.
+const BACKGROUND_ACK_PATTERN =
+  /async agent launched|agent is working in the background|running in the background|notified automatically when it completes/;
+
+// Name the dispatch without dragging its whole brief into the caller's context.
+function dispatchLabel(toolInput) {
+  const agent = typeof toolInput?.subagent_type === 'string' ? toolInput.subagent_type.trim() : '';
+  const desc = typeof toolInput?.description === 'string' ? toolInput.description.trim() : '';
+  const short = desc.replace(/\s+/g, ' ').slice(0, 60);
+  if (agent && short) return `The \`${agent}\` dispatch ("${short}")`;
+  if (agent) return `The \`${agent}\` dispatch`;
+  if (short) return `The dispatch "${short}"`;
+  return 'That dispatch';
+}
 
 function failedMessage(reason) {
   return (
@@ -211,21 +257,19 @@ async function main() {
   const text = extractText(r);
 
   // Branch A: background acknowledgement. Checked first, and when it applies
-  // it is the only message emitted.
+  // it is the only message emitted. Unthrottled by design; see backgroundAck.
   const toolInput = input.tool_input || {};
-  if (toolInput.run_in_background === true) {
-    const bgFlag = path.join(STATE_DIR, `bg-ack-${session}.flag`);
-    if (!fs.existsSync(bgFlag)) {
-      quiet(() => atomicWrite(bgFlag, '1'));
-      process.stdout.write(
-        JSON.stringify({
-          hookSpecificOutput: {
-            hookEventName: 'PostToolUse',
-            additionalContext: BACKGROUND_ACK,
-          },
-        }) + '\n'
-      );
-    }
+  const isBackground =
+    toolInput.run_in_background === true || BACKGROUND_ACK_PATTERN.test(text.toLowerCase());
+  if (isBackground) {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PostToolUse',
+          additionalContext: backgroundAck(dispatchLabel(toolInput)),
+        },
+      }) + '\n'
+    );
     return;
   }
 
