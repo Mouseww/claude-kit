@@ -221,6 +221,201 @@ test('rejects an unknown plugin instead of writing anything', () => {
   assert.equal(fs.existsSync(target), false);
 });
 
+// ---- installed-plugin layout (no --plugin; script and block ship side by side) ----
+
+test('installed layout: running with no --plugin resolves the block next to the script', () => {
+  const installDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ck-installed-'));
+  try {
+    fs.mkdirSync(path.join(installDir, 'scripts'));
+    fs.copyFileSync(SCRIPT, path.join(installDir, 'scripts', 'sync-claude-md.mjs'));
+    fs.writeFileSync(path.join(installDir, 'claude-md-block.md'), BLOCK);
+
+    const p = spawnSync(
+      process.execPath,
+      [path.join(installDir, 'scripts', 'sync-claude-md.mjs'), '--target', target],
+      { encoding: 'utf8', cwd: REPO }
+    );
+    assert.equal(p.status, 0, p.stderr);
+    const t = read();
+    assert.ok(t.startsWith(BEGIN));
+    assert.ok(t.trimEnd().endsWith(END));
+    assert.match(t, /The write handoff, the one most often missed/);
+  } finally {
+    fs.rmSync(installDir, { recursive: true, force: true });
+  }
+});
+
+// ---- --heal ---------------------------------------------------------------
+//
+// --heal is what the SessionStart hook runs. Targets are always
+// ~/.claude/CLAUDE.md and <cwd>/CLAUDE.md, so these tests point HOME (and
+// USERPROFILE, for os.homedir() on Windows) and cwd at temp directories and
+// never touch the real ~/.claude.
+
+let healHome;
+let healCwd;
+let healInstallDir;
+
+beforeEach(() => {
+  healHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ck-heal-home-'));
+  healCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'ck-heal-cwd-'));
+  healInstallDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ck-heal-plugin-'));
+  fs.mkdirSync(path.join(healInstallDir, 'scripts'));
+  fs.copyFileSync(SCRIPT, path.join(healInstallDir, 'scripts', 'sync-claude-md.mjs'));
+  fs.writeFileSync(path.join(healInstallDir, 'claude-md-block.md'), BLOCK);
+});
+
+afterEach(() => {
+  fs.rmSync(healHome, { recursive: true, force: true });
+  fs.rmSync(healCwd, { recursive: true, force: true });
+  fs.rmSync(healInstallDir, { recursive: true, force: true });
+});
+
+function userClaudeMd() {
+  return path.join(healHome, '.claude', 'CLAUDE.md');
+}
+
+function cwdClaudeMd() {
+  return path.join(healCwd, 'CLAUDE.md');
+}
+
+function runHeal(extraEnv = {}) {
+  const p = spawnSync(
+    process.execPath,
+    [path.join(healInstallDir, 'scripts', 'sync-claude-md.mjs'), '--heal'],
+    {
+      encoding: 'utf8',
+      cwd: healCwd,
+      env: { ...process.env, HOME: healHome, USERPROFILE: healHome, ...extraEnv },
+    }
+  );
+  return { status: p.status, out: p.stdout || '', err: p.stderr || '' };
+}
+
+function parseHookOutput(out) {
+  if (!out.trim()) return null;
+  return JSON.parse(out);
+}
+
+test('--heal updates a stale block already present in the target', () => {
+  fs.mkdirSync(path.dirname(userClaudeMd()), { recursive: true });
+  fs.writeFileSync(userClaudeMd(), `# Top\n\n${BEGIN}\nstale content\n${END}\n\n# Bottom\n`);
+
+  const r = runHeal();
+  assert.equal(r.status, 0, r.err);
+
+  const t = fs.readFileSync(userClaudeMd(), 'utf8');
+  assert.equal(t.includes('stale content'), false);
+  assert.match(t, /Delegate by default|Delegate to subagents by default/);
+  assert.ok(t.startsWith('# Top\n') && t.trimEnd().endsWith('# Bottom'));
+
+  const backups = fs.readdirSync(path.dirname(userClaudeMd())).filter((f) => f.endsWith('.bak'));
+  assert.equal(backups.length, 1);
+
+  const hook = parseHookOutput(r.out);
+  assert.ok(hook);
+  assert.equal(hook.hookSpecificOutput.hookEventName, 'SessionStart');
+  assert.match(hook.hookSpecificOutput.additionalContext, /dev-agents: refreshed the managed block/);
+  assert.match(hook.hookSpecificOutput.additionalContext, /takes effect in the next session/);
+  assert.match(hook.hookSpecificOutput.additionalContext, /Backup:/);
+});
+
+test('--heal leaves a file without the marker untouched', () => {
+  fs.mkdirSync(path.dirname(userClaudeMd()), { recursive: true });
+  const original = '# Top\n\nSome unrelated rules.\n';
+  fs.writeFileSync(userClaudeMd(), original);
+
+  const r = runHeal();
+  assert.equal(r.status, 0, r.err);
+  assert.equal(fs.readFileSync(userClaudeMd(), 'utf8'), original);
+  assert.equal(
+    fs.readdirSync(path.dirname(userClaudeMd())).filter((f) => f.endsWith('.bak')).length,
+    0
+  );
+  assert.equal(parseHookOutput(r.out), null);
+});
+
+test('--heal skips unbalanced markers silently', () => {
+  fs.mkdirSync(path.dirname(userClaudeMd()), { recursive: true });
+  const broken = `# Top\n\n${BEGIN}\nhalf a block\n`;
+  fs.writeFileSync(userClaudeMd(), broken);
+
+  const r = runHeal();
+  assert.equal(r.status, 0, r.err);
+  assert.equal(fs.readFileSync(userClaudeMd(), 'utf8'), broken, 'file must be left exactly as it was');
+  assert.equal(parseHookOutput(r.out), null);
+});
+
+test('--heal replaces a superseded marker in an existing target', () => {
+  fs.mkdirSync(path.dirname(userClaudeMd()), { recursive: true });
+  const legacyBegin = '<!-- BEGIN context-offload (managed) -->';
+  const legacyEnd = '<!-- END context-offload (managed) -->';
+  fs.writeFileSync(userClaudeMd(), `# Top\n\n${legacyBegin}\nold policy\n${legacyEnd}\n\n# Bottom\n`);
+
+  const r = runHeal();
+  assert.equal(r.status, 0, r.err);
+  const t = fs.readFileSync(userClaudeMd(), 'utf8');
+  assert.equal(t.includes(legacyBegin), false);
+  assert.equal((t.match(/BEGIN dev-agents \(managed\)/g) || []).length, 1);
+
+  const hook = parseHookOutput(r.out);
+  assert.ok(hook);
+  assert.match(hook.hookSpecificOutput.additionalContext, /dev-agents: refreshed/);
+});
+
+test('--heal never creates a file and never appends to one with no existing block', () => {
+  // Neither target exists at all.
+  const r = runHeal();
+  assert.equal(r.status, 0, r.err);
+  assert.equal(fs.existsSync(userClaudeMd()), false);
+  assert.equal(fs.existsSync(cwdClaudeMd()), false);
+  assert.equal(parseHookOutput(r.out), null);
+});
+
+test('CLAUDE_KIT_NO_HEAL=1 opts out entirely', () => {
+  fs.mkdirSync(path.dirname(userClaudeMd()), { recursive: true });
+  const stale = `# Top\n\n${BEGIN}\nstale content\n${END}\n`;
+  fs.writeFileSync(userClaudeMd(), stale);
+
+  const r = runHeal({ CLAUDE_KIT_NO_HEAL: '1' });
+  assert.equal(r.status, 0, r.err);
+  assert.equal(fs.readFileSync(userClaudeMd(), 'utf8'), stale);
+  assert.equal(parseHookOutput(r.out), null);
+});
+
+test('--heal is idempotent: a second run prints nothing and changes nothing', () => {
+  fs.mkdirSync(path.dirname(userClaudeMd()), { recursive: true });
+  fs.writeFileSync(userClaudeMd(), `# Top\n\n${BEGIN}\nstale content\n${END}\n`);
+
+  const first = runHeal();
+  assert.equal(first.status, 0, first.err);
+  assert.ok(parseHookOutput(first.out));
+  const afterFirst = fs.readFileSync(userClaudeMd(), 'utf8');
+
+  const second = runHeal();
+  assert.equal(second.status, 0, second.err);
+  assert.equal(parseHookOutput(second.out), null);
+  assert.equal(fs.readFileSync(userClaudeMd(), 'utf8'), afterFirst);
+});
+
+// ---- the three shipped copies must never drift -----------------------------
+
+test('the three shipped copies of sync-claude-md.mjs are byte-identical', () => {
+  const normalize = (s) => s.replace(/\r\n/g, '\n');
+  const reference = normalize(fs.readFileSync(SCRIPT, 'utf8'));
+  const copies = [
+    path.join(REPO, 'plugins', 'dev-agents', 'scripts', 'sync-claude-md.mjs'),
+    path.join(REPO, 'plugins', 'concrete-answers', 'scripts', 'sync-claude-md.mjs'),
+  ];
+  for (const copy of copies) {
+    assert.equal(
+      normalize(fs.readFileSync(copy, 'utf8')),
+      reference,
+      `${path.relative(REPO, copy)} differs from scripts/sync-claude-md.mjs; copy it verbatim`
+    );
+  }
+});
+
 test('the shipped block stays small enough to sit in context every turn', () => {
   // It is resident on every turn, so growth here is a real recurring cost.
   // Raise this ceiling deliberately, not by accident.

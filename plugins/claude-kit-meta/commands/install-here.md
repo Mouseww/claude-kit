@@ -14,7 +14,7 @@ Do this:
 1. List what the marketplace offers:
 
    ```
-   node "${CLAUDE_PLUGIN_ROOT}/../../scripts/enable-in-project.mjs" --list
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/repo-script.mjs" enable-in-project --list
    ```
 
 2. If `$ARGUMENTS` is empty, show that list and ask which plugins to enable.
@@ -23,7 +23,7 @@ Do this:
 3. Preview the change before writing anything:
 
    ```
-   node "${CLAUDE_PLUGIN_ROOT}/../../scripts/enable-in-project.mjs" --project . --plugins <names> --dry-run
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/repo-script.mjs" enable-in-project --project . --plugins <names> --dry-run
    ```
 
    Show the user the diff it prints.

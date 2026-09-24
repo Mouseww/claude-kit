@@ -34,6 +34,9 @@ export const HELPER_OWNERS = {
     'plugins/claude-kit-meta/scripts/check-daily-update.mjs',
     'plugins/rtk/scripts/rtk-rewrite.mjs',
     'templates/plugin-template/scripts/example-hook.mjs',
+    'scripts/sync-claude-md.mjs',
+    'plugins/dev-agents/scripts/sync-claude-md.mjs',
+    'plugins/concrete-answers/scripts/sync-claude-md.mjs',
   ],
   atomicWrite: [
     'plugins/dev-agents/scripts/require-task-plan.mjs',

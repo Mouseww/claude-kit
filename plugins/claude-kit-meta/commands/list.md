@@ -8,7 +8,7 @@ Show what is in this claude-kit repository.
 Run:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/../../scripts/enable-in-project.mjs" --list
+node "${CLAUDE_PLUGIN_ROOT}/scripts/repo-script.mjs" enable-in-project --list
 ```
 
 Then present the result as a short table: plugin name, one-line description, and

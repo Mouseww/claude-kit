@@ -132,6 +132,70 @@ test('a downgrade is a violation, not a pass', () => {
   assert.match(violations[0].reason, /backwards, from 1\.9\.0 to 1\.8\.0/);
 });
 
+test('a README (any case) is not a runtime path', () => {
+  assert.equal(isRuntimePath('plugins/dev-agents/Readme.md'), false);
+  assert.equal(isRuntimePath('plugins/dev-agents/README.MD'), false);
+});
+
+test('a CHANGELOG and a plugin-root markdown file are not runtime paths', () => {
+  assert.equal(isRuntimePath('plugins/dev-agents/CHANGELOG.md'), false);
+  assert.equal(isRuntimePath('plugins/dev-agents/NOTES.md'), false);
+});
+
+test('claude-md-block.md at the plugin root is still a runtime path', () => {
+  assert.equal(isRuntimePath('plugins/dev-agents/claude-md-block.md'), true);
+});
+
+test('anything under docs/ is not a runtime path, at any depth', () => {
+  assert.equal(isRuntimePath('plugins/dev-agents/docs/guide.md'), false);
+  assert.equal(isRuntimePath('plugins/dev-agents/docs/nested/deep.md'), false);
+});
+
+test('a plugin rename (disappear + appear) without a version bump above the old one is a violation', () => {
+  const { violations } = decide(['plugins/bar/scripts/x.mjs'], { foo: '1.0.0' }, { bar: '1.0.0' });
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].plugin, 'bar');
+  assert.match(violations[0].reason, /rename of "foo"/);
+});
+
+test('a plugin rename that bumps the version above the old one passes', () => {
+  const { violations } = decide(['plugins/bar/scripts/x.mjs'], { foo: '1.0.0' }, { bar: '1.1.0' });
+  assert.deepEqual(violations, []);
+});
+
+test('deleting one plugin and adding two unrelated ones is not treated as a rename', () => {
+  // A disappeared plus two appeared is ambiguous (which one, if any, is "A
+  // renamed"?), so the implicit pairing must not fire: A is an ordinary
+  // delete (no bump owed), B and C are ordinary new plugins (no bump owed).
+  const { violations } = decide(
+    ['plugins/b/scripts/x.mjs', 'plugins/c/scripts/y.mjs'],
+    { a: '1.0.0' },
+    { b: '1.0.0', c: '1.0.0' }
+  );
+  assert.deepEqual(violations, []);
+});
+
+test('a 1:1 delete and add is still treated as a rename requiring a bump', () => {
+  const { violations } = decide(['plugins/b/scripts/x.mjs'], { a: '1.0.0' }, { b: '1.0.0' });
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].plugin, 'b');
+  assert.match(violations[0].reason, /rename of "a"/);
+});
+
+test('an explicit git-reported rename is checked even without an implicit appear+disappear', () => {
+  // Both versionsBefore and versionsAfter already list "bar" (something else
+  // touched it too), so the implicit appeared/disappeared heuristic alone
+  // would not fire; the explicit rename pair from git must still be checked.
+  const { violations } = decide(
+    ['plugins/bar/scripts/x.mjs'],
+    { foo: '1.0.0', bar: '1.0.0' },
+    { bar: '1.0.0' },
+    [{ from: 'foo', to: 'bar' }]
+  );
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].plugin, 'bar');
+});
+
 test('checked lists every plugin the gate actually considered', () => {
   const { checked } = decide(
     ['plugins/dev-agents/scripts/a.mjs', 'plugins/dev-agents/README.md', 'plugins/rtk/scripts/b.mjs'],

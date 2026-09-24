@@ -19,7 +19,7 @@ Steps:
 1. Preview first, always:
 
    ```
-   node "${CLAUDE_PLUGIN_ROOT}/../../scripts/sync-claude-md.mjs" --plugin dev-agents --target <target> --dry-run
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/sync-claude-md.mjs" --target <target> --dry-run
    ```
 
 2. Show the user the diff and the action list it prints. Call out explicitly if
@@ -40,3 +40,9 @@ Guarantees worth repeating to the user if they hesitate:
   passed through unchanged.
 - If the markers are unbalanced, the script refuses to write rather than guess.
 - `--remove` takes the block back out and leaves the rest of the file alone.
+
+A SessionStart hook also runs this script with `--heal` at the start of every
+session. If a block installed by an earlier version of this pack is already in
+a CLAUDE.md, an update to it is applied automatically (with the same
+timestamped `.bak`); this command is only needed to install the block the
+first time, to change its target, or to remove it.

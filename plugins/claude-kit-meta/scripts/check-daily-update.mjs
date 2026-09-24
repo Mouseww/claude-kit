@@ -3,9 +3,10 @@
 // Fires via UserPromptSubmit hook; checks at most once per calendar day.
 
 import { execFileSync, spawn } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statSync, openSync, closeSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statSync, openSync, closeSync, unlinkSync, realpathSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { appendFileSync } from 'node:fs';
 import { resolveMarketplaceSource, computeDirectoryFingerprint } from './marketplace-source.mjs';
 import { pickExecutable, needsShell } from './resolve-command.mjs';
@@ -19,6 +20,7 @@ const LOG_FILE = join(CLAUDE_DIR, 'claude-kit-update.log');
 const PLUGINS_DIR = join(CLAUDE_DIR, 'plugins');
 const CACHE_DIR = join(PLUGINS_DIR, 'cache', MARKETPLACE_NAME);
 const IS_WINDOWS = process.platform === 'win32';
+const SCRIPT_PATH = fileURLToPath(import.meta.url);
 
 function today() {
   const d = new Date();
@@ -202,14 +204,14 @@ function findSyncScript(pluginName) {
 // either a literal defined in this file or a plugin name that has already
 // been whitelisted against /^[a-zA-Z0-9_-]+$/ in getInstalledPlugins(), so
 // there is no shell-injection surface from user-controlled input.
-function run(cmd, args) {
+function run(cmd, args, extraOptions = {}) {
   const resolved = resolveCmd(cmd);
   try {
     if (needsShell(resolved)) {
       const quotedArgs = args.map(a => `"${a}"`);
-      execFileSync(`"${resolved}"`, quotedArgs, { timeout: TIMEOUT_MS, encoding: 'utf8', stdio: 'pipe', shell: true });
+      execFileSync(`"${resolved}"`, quotedArgs, { timeout: TIMEOUT_MS, encoding: 'utf8', stdio: 'pipe', shell: true, ...extraOptions });
     } else {
-      execFileSync(resolved, args, { timeout: TIMEOUT_MS, encoding: 'utf8', stdio: 'pipe' });
+      execFileSync(resolved, args, { timeout: TIMEOUT_MS, encoding: 'utf8', stdio: 'pipe', ...extraOptions });
     }
     return true;
   } catch (e) {
@@ -219,7 +221,7 @@ function run(cmd, args) {
 }
 
 function spawnUpdate(flag, todayStr, fingerprint) {
-  const child = spawn(process.execPath, [import.meta.filename, '--do-update'], {
+  const child = spawn(process.execPath, [SCRIPT_PATH, '--do-update'], {
     detached: true,
     stdio: 'ignore',
     env: {
@@ -259,7 +261,12 @@ async function doUpdate() {
   for (const name of updated) {
     const syncScript = findSyncScript(name);
     if (syncScript) {
-      run(process.execPath, [syncScript]);
+      // --heal only refreshes an already-present managed block in
+      // ~/.claude/CLAUDE.md and cwd/CLAUDE.md, and always exits 0. Without it
+      // the script defaults to --target project and could APPEND a block
+      // into whatever cwd this child inherited. Running with cwd set to the
+      // home directory makes the project-target half of --heal a no-op too.
+      run(process.execPath, [syncScript, '--heal'], { cwd: homedir() });
     }
   }
 
@@ -312,8 +319,45 @@ async function main() {
   output('claude-kit: checking for plugin updates in the background.');
 }
 
-main().catch(e => {
-  log(`fatal: ${e.message}`);
-  releaseLock();
-  process.exit(0);
-});
+// Only run when this file is executed directly (as the hook, or as the
+// detached --do-update child), not when it is imported for its exports (see
+// tests/check-daily-update.test.mjs). Resolving both sides through
+// fs.realpathSync.native() (falling back to the unresolved path if that
+// throws, e.g. a path that does not exist on disk) collapses Windows 8.3
+// short names ("RUNNER~1") against long names, symlinks, and relative
+// argv[1] values before comparing; the comparison itself is case-insensitive
+// on win32, where the filesystem is case-insensitive too.
+function realOrSelf(p) {
+  try {
+    return realpathSync.native(p);
+  } catch {
+    return p;
+  }
+}
+
+function isMainModule() {
+  const invoked = process.argv[1];
+  if (!invoked) return false;
+  const a = realOrSelf(SCRIPT_PATH);
+  const b = realOrSelf(resolve(invoked));
+  return IS_WINDOWS ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+if (isMainModule()) {
+  main().catch(e => {
+    log(`fatal: ${e.message}`);
+    releaseLock();
+    process.exit(0);
+  });
+}
+
+export {
+  acquireLock,
+  releaseLock,
+  readFlag,
+  writeFlag,
+  findSyncScript,
+  compareSemver,
+  getInstalledPlugins,
+  today,
+};

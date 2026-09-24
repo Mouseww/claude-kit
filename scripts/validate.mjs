@@ -67,6 +67,53 @@ const HOOKS_TOP_KEYS = new Set(['$schema', 'hooks']);
 const MATCHER_KEYS = new Set(['matcher', 'hooks']);
 const HOOK_ITEM_KEYS = new Set(['type', 'command', 'timeout']);
 
+// Every hook event Claude Code recognizes. An event name outside this set is
+// either a typo (silently never fires) or a real new event this list has not
+// caught up with yet -- either way worth naming rather than letting slide.
+const HOOK_EVENTS = new Set([
+  'PreToolUse',
+  'PostToolUse',
+  'PostToolUseFailure',
+  'Notification',
+  'UserPromptSubmit',
+  'SessionStart',
+  'SessionEnd',
+  'Stop',
+  'StopFailure',
+  'SubagentStart',
+  'SubagentStop',
+  'PreCompact',
+  'PostCompact',
+  'PermissionRequest',
+  'TeammateIdle',
+  'TaskCompleted',
+  'ConfigChange',
+  'WorktreeCreate',
+  'WorktreeRemove',
+  'InstructionsLoaded',
+  'Elicitation',
+  'ElicitationResult',
+  'Setup',
+]);
+
+// A hook command, or a commands/*.md or skills/**/*.md file, that reaches
+// outside its own plugin directory via `${CLAUDE_PLUGIN_ROOT}/..`. An
+// installed plugin is isolated from the rest of this repo checkout, so a path
+// like this only ever works in-repo and breaks for every actual user.
+const PLUGIN_ROOT_ESCAPE_RE = /\$\{CLAUDE_PLUGIN_ROOT\}\/\.\./;
+
+function checkNoPluginRootEscape(file, text) {
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (PLUGIN_ROOT_ESCAPE_RE.test(lines[i])) {
+      err(
+        file,
+        `line ${i + 1} references "\${CLAUDE_PLUGIN_ROOT}/.."; this escapes the plugin directory, which does not exist in an installed copy`
+      );
+    }
+  }
+}
+
 function readJson(file) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -77,16 +124,36 @@ function readJson(file) {
 }
 
 // Minimal YAML frontmatter reader: only the top-level `key: value` pairs this
-// repository actually uses. A full YAML parser would be a dependency for no gain.
+// repository actually uses, plus `key: |` / `key: >` block scalars (with an
+// optional -/+ chomp indicator), since a multi-line `description:` is common
+// enough that skipping it produced false positives ("description is very
+// short" on a value that was literally the string "|"). A full YAML parser
+// would be a dependency for no further gain here.
 function frontmatter(file) {
   const text = fs.readFileSync(file, 'utf8');
   if (!text.startsWith('---')) return null;
   const end = text.indexOf('\n---', 3);
   if (end === -1) return null;
   const block = text.slice(text.indexOf('\n', 3) + 1, end + 1);
+  const lines = block.split('\n');
   const out = {};
-  for (const line of block.split('\n')) {
-    const m = /^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/.exec(line);
+  for (let i = 0; i < lines.length; i++) {
+    const scalar = /^([A-Za-z][A-Za-z0-9_-]*):\s*([|>])[+-]?\s*$/.exec(lines[i]);
+    if (scalar) {
+      const [, key, style] = scalar;
+      const collected = [];
+      let j = i + 1;
+      for (; j < lines.length && (lines[j] === '' || /^\s/.test(lines[j])); j++) {
+        collected.push(lines[j].replace(/^\s+/, ''));
+      }
+      i = j - 1;
+      // "|" (literal) keeps line breaks; ">" (folded) joins with spaces.
+      // Trailing blank lines are trimmed either way; this reader only needs
+      // the text content, not exact YAML chomping semantics.
+      out[key] = (style === '>' ? collected.join(' ') : collected.join('\n')).replace(/\s+$/, '');
+      continue;
+    }
+    const m = /^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/.exec(lines[i]);
     if (!m) continue;
     let v = m[2].trim();
     if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
@@ -234,6 +301,15 @@ for (const entry of marketplace.plugins) {
     if (hooks) checkHookCommands(hooks, standardHooks, dir);
   }
 
+  // ---- claude-md-block.md needs a script to apply it -------------------------
+  // A pack that ships claude-md-block.md but no sync-claude-md.mjs advertises a
+  // block nothing ever installs into a consuming project's CLAUDE.md.
+  const claudeMdBlock = path.join(dir, 'claude-md-block.md');
+  const syncScript = path.join(dir, 'scripts', 'sync-claude-md.mjs');
+  if (fs.existsSync(claudeMdBlock) && !fs.existsSync(syncScript)) {
+    err(claudeMdBlock, 'plugin ships claude-md-block.md but no scripts/sync-claude-md.mjs to apply it');
+  }
+
   // ---- empty capability directories ------------------------------------------
   // An empty skills/ or agents/ directory means the pack advertises something it
   // does not ship. This is not hypothetical: dev-agents shipped an empty
@@ -288,6 +364,13 @@ for (const entry of marketplace.plugins) {
         `declares skill "${skillName}" which is not plugins/*/skills/${skillName}/SKILL.md in this repo and is not listed in ${path.basename(dir)}/.claude-plugin/plugin.json "externalSkills"`
       );
     }
+  }
+
+  // Any markdown under skills/ (not just SKILL.md itself, e.g. a reference
+  // doc a skill loads) can carry the same plugin-root escape as a hook
+  // command.
+  for (const skillMd of walk(path.join(dir, 'skills'), (n) => n.endsWith('.md'))) {
+    checkNoPluginRootEscape(skillMd, fs.readFileSync(skillMd, 'utf8'));
   }
 
   // ---- agents ---------------------------------------------------------------
@@ -354,6 +437,8 @@ for (const entry of marketplace.plugins) {
       continue;
     }
     if (!fm.description) err(cmd, 'frontmatter missing "description"');
+
+    checkNoPluginRootEscape(cmd, fs.readFileSync(cmd, 'utf8'));
   }
 }
 
@@ -396,6 +481,9 @@ function checkHookCommands(hooks, hooksFile, pluginDir) {
     warn(hooksFile, `"$schema" should be "../../../schemas/hooks.schema.json"`);
   }
   for (const [event, matchers] of Object.entries(groups)) {
+    if (!HOOK_EVENTS.has(event)) {
+      err(hooksFile, `"${event}" is not a recognized hook event name`);
+    }
     if (!Array.isArray(matchers)) {
       err(hooksFile, `"${event}" must be an array`);
       continue;
@@ -429,6 +517,12 @@ function checkHookCommands(hooks, hooksFile, pluginDir) {
 
         if (!/^node\s/.test(h.command.trim())) {
           err(hooksFile, `"${event}" hook command does not start with "node": ${h.command}`);
+        }
+        if (PLUGIN_ROOT_ESCAPE_RE.test(h.command)) {
+          err(
+            hooksFile,
+            `"${event}" hook command references "\${CLAUDE_PLUGIN_ROOT}/.."; this escapes the plugin directory, which does not exist in an installed copy`
+          );
         }
         if (h.timeout != null) {
           if (!Number.isInteger(h.timeout) || h.timeout < 1 || h.timeout > 600) {

@@ -8,8 +8,14 @@ Add a new capability pack to this claude-kit repository.
 
 Requested: `$ARGUMENTS`
 
-The repository root is `${CLAUDE_PLUGIN_ROOT}/../..`. Read `CONTRIBUTING.md` there
-first — it is the authority on layout and naming; this command is only the driver.
+Get the repository root by running:
+
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/repo-script.mjs" --root
+```
+
+Read `CONTRIBUTING.md` there first — it is the authority on layout and naming; this
+command is only the driver.
 
 Steps:
 
@@ -32,7 +38,7 @@ Steps:
 6. Run the validator and fix anything it reports:
 
    ```
-   node "${CLAUDE_PLUGIN_ROOT}/../../scripts/validate.mjs"
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/repo-script.mjs" validate
    ```
 
 7. Summarise what was created and what the user still needs to write (the actual

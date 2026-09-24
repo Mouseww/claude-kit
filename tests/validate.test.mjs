@@ -382,6 +382,132 @@ test('an unknown key in a hook item is reported', () => {
   assert.match(r.out, /"PreToolUse" hook item has an unknown key "description"/);
 });
 
+test('an unrecognized hook event name is reported', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  fs.mkdirSync(path.join(pluginDir, 'hooks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, 'hooks', 'hooks.json'),
+    JSON.stringify({
+      hooks: {
+        PreToolTypo: [{ matcher: 'Agent', hooks: [{ type: 'command', command: 'node x.mjs' }] }],
+      },
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /"PreToolTypo" is not a recognized hook event name/);
+});
+
+test('a recognized-but-less-common hook event name (SessionEnd) is not reported', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  fs.mkdirSync(path.join(pluginDir, 'hooks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, 'hooks', 'hooks.json'),
+    JSON.stringify({
+      hooks: {
+        SessionEnd: [{ matcher: 'Agent', hooks: [{ type: 'command', command: 'node x.mjs' }] }],
+      },
+    })
+  );
+  const r = run();
+  assert.equal(r.status, 0, r.out);
+});
+
+test('a hook command that escapes the plugin root via ${CLAUDE_PLUGIN_ROOT}/.. is reported', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  fs.mkdirSync(path.join(pluginDir, 'hooks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, 'hooks', 'hooks.json'),
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: 'Agent',
+            hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/../../scripts/x.mjs"' }],
+          },
+        ],
+      },
+    })
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /references "\$\{CLAUDE_PLUGIN_ROOT\}\/\.\."/);
+});
+
+test('a command markdown file that escapes the plugin root is reported', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  fs.mkdirSync(path.join(pluginDir, 'commands'), { recursive: true });
+  fs.writeFileSync(
+    path.join(pluginDir, 'commands', 'x.md'),
+    ['---', 'description: a fixture command long enough to pass', '---', '', 'Run `${CLAUDE_PLUGIN_ROOT}/../../scripts/x.mjs`.'].join('\n')
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /commands[\\/]x\.md: line 5 references/);
+});
+
+test('a skill reference doc (not SKILL.md) that escapes the plugin root is reported', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  writeSkill(pluginDir, 'skill-with-ref', []);
+  fs.writeFileSync(
+    path.join(pluginDir, 'skills', 'skill-with-ref', 'reference.md'),
+    'See `${CLAUDE_PLUGIN_ROOT}/../../scripts/x.mjs`.'
+  );
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /reference\.md: line 1 references/);
+});
+
+test('claude-md-block.md with no scripts/sync-claude-md.mjs is reported', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  fs.writeFileSync(path.join(pluginDir, 'claude-md-block.md'), '# Fixture block');
+  const r = run();
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /claude-md-block\.md: plugin ships claude-md-block\.md but no scripts\/sync-claude-md\.mjs/);
+});
+
+test('claude-md-block.md with a scripts/sync-claude-md.mjs present is not reported', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  fs.writeFileSync(path.join(pluginDir, 'claude-md-block.md'), '# Fixture block');
+  fs.mkdirSync(path.join(pluginDir, 'scripts'), { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, 'scripts', 'sync-claude-md.mjs'), '// fixture');
+  const r = run();
+  assert.equal(r.status, 0, r.out);
+});
+
+// A SKILL.md `description: |` block scalar used to be read literally as the
+// string "|", which tripped the "description is very short" warning on a
+// description that was actually plenty long.
+test('a SKILL.md description written as a YAML "|" block scalar is read in full', () => {
+  writeMarketplace();
+  const pluginDir = writePlugin();
+  const skillDir = path.join(pluginDir, 'skills', 'skill-block-desc');
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(skillDir, 'SKILL.md'),
+    [
+      '---',
+      'name: skill-block-desc',
+      'description: |',
+      '  A fixture skill description written as a YAML block scalar, long enough to',
+      '  clear the forty character minimum well on its own.',
+      '---',
+      '',
+      'Fixture body.',
+    ].join('\n')
+  );
+  const r = run();
+  assert.equal(r.status, 0, r.out);
+  assert.equal(r.out.includes('description is very short'), false);
+});
+
 test('an array-shaped hooks.hooks value is reported cleanly instead of iterated as a map', () => {
   writeMarketplace();
   const pluginDir = writePlugin();

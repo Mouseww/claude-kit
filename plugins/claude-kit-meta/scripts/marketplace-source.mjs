@@ -63,6 +63,38 @@ export function resolveMarketplaceSource(data, name) {
   return null;
 }
 
+/**
+ * Candidate local directory roots for a marketplace entry, most-preferred
+ * first: `installLocation` (set for every entry regardless of source kind,
+ * since Claude Code always checks out or clones somewhere), then
+ * `source.path` for a directory-source entry. Callers (repo-script.mjs) are
+ * responsible for validating a candidate actually holds a repo checkout
+ * before trusting it -- this only enumerates what known_marketplaces.json
+ * offers.
+ *
+ * @param {object} data parsed known_marketplaces.json contents
+ * @param {string} name marketplace name, e.g. 'claude-kit'
+ * @returns {string[]}
+ */
+export function getMarketplaceRootCandidates(data, name) {
+  if (!data || typeof data !== 'object') return [];
+
+  const candidates = [];
+  for (const [key, entry] of Object.entries(data)) {
+    if (!entry || typeof entry !== 'object') continue;
+    if (!entryMatchesName(key, entry, name)) continue;
+
+    if (typeof entry.installLocation === 'string' && entry.installLocation) {
+      candidates.push(entry.installLocation);
+    }
+    const src = normalizeEntry(entry);
+    if (src.source === 'directory' && typeof src.path === 'string' && src.path) {
+      candidates.push(src.path);
+    }
+  }
+  return candidates;
+}
+
 /** Read `<pluginDir>/.claude-plugin/plugin.json` and return its version, or 'unknown'. */
 function readPluginVersion(pluginDir) {
   try {
